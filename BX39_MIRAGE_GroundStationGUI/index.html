@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>MIRAGE Ground Station</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="src/app.js" defer></script>
+  </head>
+  <body>
+    <main class="console-grid" aria-label="MIRAGE mission control console">
+      <section class="panel logs-panel" aria-labelledby="logs-title">
+        <header class="panel-header mission-header">
+          <div>
+            <p class="eyebrow">BX39 / E-Link</p>
+            <h1 id="logs-title">MIRAGE Mission Control</h1>
+          </div>
+          <div class="mission-chips" aria-label="Current MIRAGE state">
+            <span id="overallHealth" class="chip chip-ok">Healthy</span>
+            <span id="missionMode" class="chip">Standby</span>
+            <span id="linkState" class="chip chip-ok">E-Link online</span>
+          </div>
+        </header>
+
+        <div class="status-strip" aria-label="Latest status">
+          <div>
+            <span>Last frame</span>
+            <strong id="lastFrameAge">--</strong>
+          </div>
+          <div>
+            <span>Onboard log</span>
+            <strong id="storageState">SD logging</strong>
+          </div>
+          <div>
+            <span>Controller</span>
+            <strong id="controllerState">Main MCU ready</strong>
+          </div>
+        </div>
+
+        <ol id="logFeed" class="log-feed" aria-label="Timestamped operations log"></ol>
+      </section>
+
+      <section class="panel telemetry-panel" aria-labelledby="telemetry-title">
+        <header class="panel-header">
+          <div>
+            <p class="eyebrow">1 Hz mock downlink</p>
+            <h2 id="telemetry-title">Live Telemetry</h2>
+          </div>
+          <div class="telemetry-counters">
+            <span>Frame <strong id="frameNumber">--</strong></span>
+            <span>Latency <strong id="latencyValue">--</strong></span>
+          </div>
+        </header>
+
+        <div class="quick-metrics" aria-label="Key live telemetry values">
+          <article class="metric" id="metricMethane">
+            <span>CH4</span>
+            <strong id="methaneValue">--</strong>
+            <small>ppm</small>
+          </article>
+          <article class="metric" id="metricPressure">
+            <span>Chamber pressure</span>
+            <strong id="chamberPressureValue">--</strong>
+            <small>bar</small>
+          </article>
+          <article class="metric" id="metricTemperature">
+            <span>Chamber temp</span>
+            <strong id="chamberTempValue">--</strong>
+            <small>deg C</small>
+          </article>
+          <article class="metric" id="metricHumidity">
+            <span>Humidity</span>
+            <strong id="humidityValue">--</strong>
+            <small>% RH</small>
+          </article>
+          <article class="metric" id="metricLink">
+            <span>Link quality</span>
+            <strong id="linkQualityValue">--</strong>
+            <small>%</small>
+          </article>
+        </div>
+
+        <div class="chart-grid">
+          <article class="chart-card">
+            <div class="chart-head">
+              <h3>Gas Sensor</h3>
+              <span><i class="legend-dot methane"></i>CH4 <i class="legend-dot co2"></i>CO2 <i class="legend-dot water"></i>H2O</span>
+            </div>
+            <canvas id="gasChart" aria-label="Gas concentration trend"></canvas>
+          </article>
+          <article class="chart-card">
+            <div class="chart-head">
+              <h3>Pressure</h3>
+              <span><i class="legend-dot chamber-pressure"></i>Chamber <i class="legend-dot ambient-pressure"></i>Ambient</span>
+            </div>
+            <canvas id="pressureChart" aria-label="Pressure trend"></canvas>
+          </article>
+          <article class="chart-card">
+            <div class="chart-head">
+              <h3>Thermal / Humidity</h3>
+              <span><i class="legend-dot chamber-temp"></i>Chamber <i class="legend-dot electronics-temp"></i>Electronics <i class="legend-dot humidity"></i>RH</span>
+            </div>
+            <canvas id="thermalChart" aria-label="Thermal and humidity trend"></canvas>
+          </article>
+          <article class="chart-card">
+            <div class="chart-head">
+              <h3>Link / Actuation</h3>
+              <span><i class="legend-dot link"></i>E-Link <i class="legend-dot pump"></i>Pumps <i class="legend-dot thermal"></i>Thermal</span>
+            </div>
+            <canvas id="linkChart" aria-label="Link and actuator trend"></canvas>
+          </article>
+        </div>
+      </section>
+
+      <section class="panel command-panel" aria-labelledby="commands-title">
+        <header class="panel-header">
+          <div>
+            <p class="eyebrow">Mock uplink</p>
+            <h2 id="commands-title">Mission Commands</h2>
+          </div>
+          <span id="commandStatus" class="command-status">Ready</span>
+        </header>
+
+        <div class="command-groups">
+          <section class="command-group" aria-labelledby="mode-commands">
+            <h3 id="mode-commands">Mission Mode</h3>
+            <div class="command-grid">
+              <button type="button" data-command="startExperiment">Start experiment</button>
+              <button type="button" data-command="enterStandby">Enter standby</button>
+              <button type="button" data-command="requestStatus">Request status update</button>
+              <button type="button" data-command="pingExperiment">Ping experiment</button>
+            </div>
+          </section>
+
+          <section class="command-group" aria-labelledby="pressure-commands">
+            <h3 id="pressure-commands">Pressure / Flow</h3>
+            <div class="command-grid">
+              <button type="button" data-command="startPressurisation">Start pressurisation</button>
+              <button type="button" data-command="stopPressurisation">Stop pressurisation</button>
+              <button type="button" data-command="openOutletValve">Open outlet valve</button>
+              <button type="button" data-command="closeOutletValve">Close outlet valve</button>
+              <button type="button" data-command="flushChamber" data-confirm="Flush the measurement chamber now?">Flush chamber</button>
+            </div>
+          </section>
+
+          <section class="command-group" aria-labelledby="thermal-commands">
+            <h3 id="thermal-commands">Thermal Control</h3>
+            <div class="command-grid">
+              <button type="button" data-command="enableHeating">Enable heating</button>
+              <button type="button" data-command="disableHeating">Disable heating</button>
+              <button type="button" data-command="enableCooling">Enable cooling</button>
+              <button type="button" data-command="disableCooling">Disable cooling</button>
+            </div>
+          </section>
+
+          <section class="command-group recovery-group" aria-labelledby="recovery-commands">
+            <h3 id="recovery-commands">Recovery</h3>
+            <div class="command-grid">
+              <button type="button" class="warning-command" data-command="restartController" data-confirm="Restart the main controller? Telemetry may pause during reboot.">Restart main controller</button>
+              <button type="button" class="danger-command" data-command="emergencyStop" data-confirm="Send emergency stop and safe shutdown?">Emergency stop / safe shutdown</button>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section class="panel terminal-panel" aria-labelledby="terminal-title">
+        <header class="panel-header">
+          <div>
+            <p class="eyebrow">Manual intervention</p>
+            <h2 id="terminal-title">Built-In Terminal</h2>
+          </div>
+          <span id="terminalRoute" class="terminal-route">local mock route</span>
+        </header>
+
+        <div id="terminalOutput" class="terminal-output" role="log" aria-live="polite"></div>
+        <form id="terminalForm" class="terminal-form" autocomplete="off">
+          <label for="terminalInput">manual command</label>
+          <input id="terminalInput" type="text" spellcheck="false" placeholder="type status, help, or ping experiment">
+          <button type="submit">Send</button>
+        </form>
+      </section>
+    </main>
+  </body>
+</html>
