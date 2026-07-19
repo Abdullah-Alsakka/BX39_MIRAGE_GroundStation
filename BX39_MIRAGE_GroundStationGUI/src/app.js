@@ -4,104 +4,158 @@
   const MAX_SAMPLES = 120;
   const TELEMETRY_PERIOD_MS = 1000;
 
+  const RELAY_LINES = [
+    { id: "relay1", label: "PDB relay 1", pin: "GPIO48 / PDB pin 1" },
+    { id: "relay2", label: "PDB relay 2", pin: "GPIO1 / PDB pin 4" },
+    { id: "relay3", label: "PDB relay 3", pin: "GPIO2 / PDB pin 5" },
+    { id: "relay4", label: "PDB relay 4", pin: "GPIO21 / PDB pin 28" }
+  ];
+
+  const PRESSURE_PERIPHERALS = [
+    { id: "pump1", label: "vacuum pump 1", offLabel: "OFF", onLabel: "ON" },
+    { id: "pump2", label: "vacuum pump 2", offLabel: "OFF", onLabel: "ON" },
+    { id: "compressor", label: "compressor", offLabel: "OFF", onLabel: "ON" },
+    { id: "outletValve", label: "outlet valve", offLabel: "CLOSED", onLabel: "OPEN" }
+  ];
+
+  const THERMAL_CHANNELS = [
+    { bit: 0, label: "SD-card heater" },
+    { bit: 1, label: "Peltier chamber cooler" },
+    { bit: 2, label: "outlet heater" },
+    { bit: 3, label: "intake preheater" },
+    { bit: 4, label: "secondary inlet heater" },
+    { bit: 5, label: "Peltier stage 1" },
+    { bit: 6, label: "Peltier stage 2" },
+    { bit: 7, label: "backup thermal channel" }
+  ];
+
+  const DEFAULT_HEATER_MASK = 0x0d;
+  const DEFAULT_COOLER_MASK = 0x62;
+
   const COMMANDS = {
     startExperiment: {
       label: "start experiment",
+      wireCommand: "MODE MEASUREMENTS",
       aliases: ["start experiment", "start measurements", "measurements", "start"],
       effect: function (sim) {
         sim.mode = "MEASUREMENTS";
         sim.pressurisationActive = true;
+        sim.setPressureTrain(true);
         sim.outletValveOpen = false;
+        sim.setPeripheral("outletValve", false);
         sim.emergencyStopped = false;
         return "autonomous Measurements loop requested";
       }
     },
     enterStandby: {
       label: "enter standby",
+      wireCommand: "MODE STANDBY",
       aliases: ["enter standby", "standby", "hold"],
       effect: function (sim) {
         sim.mode = "STANDBY";
         sim.pressurisationActive = false;
+        sim.setPressureTrain(false);
         return "autonomous Standby loop requested";
       }
     },
     startPressurisation: {
       label: "start pressurisation",
+      wireCommand: "PRESSURE ON",
       aliases: ["start pressurisation", "start pressurization", "pressurise", "pressurize"],
       effect: function (sim) {
         sim.pressurisationActive = true;
+        sim.setPressureTrain(true);
         sim.outletValveOpen = false;
+        sim.setPeripheral("outletValve", false);
         return "pressure MCU enabled pumps and compressor";
       }
     },
     stopPressurisation: {
       label: "stop pressurisation",
+      wireCommand: "PRESSURE OFF",
       aliases: ["stop pressurisation", "stop pressurization", "stop pressure"],
       effect: function (sim) {
         sim.pressurisationActive = false;
+        sim.setPressureTrain(false);
         return "pressure MCU disabled pumps and compressor";
       }
     },
     openOutletValve: {
       label: "open outlet valve",
+      wireCommand: "VALVE OPEN",
       aliases: ["open outlet valve", "open valve", "outlet open"],
       effect: function (sim) {
         sim.outletValveOpen = true;
+        sim.setPeripheral("outletValve", true);
         return "normally closed outlet valve commanded open";
       }
     },
     closeOutletValve: {
       label: "close outlet valve",
+      wireCommand: "VALVE CLOSE",
       aliases: ["close outlet valve", "close valve", "outlet close"],
       effect: function (sim) {
         sim.outletValveOpen = false;
+        sim.setPeripheral("outletValve", false);
         return "outlet valve commanded closed";
       }
     },
     enableHeating: {
       label: "enable heating",
+      wireCommand: "HEATER ALL ON",
       aliases: ["enable heating", "heating on", "heat on"],
       effect: function (sim) {
         sim.heatingEnabled = true;
+        sim.heaterMask |= DEFAULT_HEATER_MASK;
         return "thermal MCU heater loops enabled";
       }
     },
     disableHeating: {
       label: "disable heating",
+      wireCommand: "HEATER ALL OFF",
       aliases: ["disable heating", "heating off", "heat off"],
       effect: function (sim) {
         sim.heatingEnabled = false;
+        sim.heaterMask &= ~DEFAULT_HEATER_MASK;
         return "thermal MCU heater loops disabled";
       }
     },
     enableCooling: {
       label: "enable cooling",
+      wireCommand: "COOLING ON",
       aliases: ["enable cooling", "cooling on", "peltier on"],
       effect: function (sim) {
         sim.coolingEnabled = true;
+        sim.heaterMask |= DEFAULT_COOLER_MASK;
         return "Peltier cooler loop enabled";
       }
     },
     disableCooling: {
       label: "disable cooling",
+      wireCommand: "COOLING OFF",
       aliases: ["disable cooling", "cooling off", "peltier off"],
       effect: function (sim) {
         sim.coolingEnabled = false;
+        sim.heaterMask &= ~DEFAULT_COOLER_MASK;
         return "Peltier cooler loop disabled";
       }
     },
     flushChamber: {
       label: "flush chamber",
+      wireCommand: "FLUSH CHAMBER",
       aliases: ["flush chamber", "flush", "purge chamber"],
       effect: function (sim) {
         sim.flushTicks = 8;
         sim.outletValveOpen = true;
+        sim.setPeripheral("outletValve", true);
         sim.pressurisationActive = true;
+        sim.setPressureTrain(true);
         return "flush sequence started with fresh ambient-air exchange";
       }
     },
     requestStatus: {
       label: "request status update",
+      wireCommand: "STATUS",
       aliases: ["request status update", "status update", "status"],
       effect: function (sim) {
         sim.forceStatusEvent = true;
@@ -110,17 +164,20 @@
     },
     restartController: {
       label: "restart main controller",
+      wireCommand: "REBOOT",
       aliases: ["restart main controller", "restart controller", "reboot mcu", "reboot"],
       disruptive: true,
       effect: function (sim) {
         sim.controllerRebootTicks = 4;
         sim.mode = "STANDBY";
         sim.pressurisationActive = false;
+        sim.setPressureTrain(false);
         return "main MCU reboot sequence started";
       }
     },
     emergencyStop: {
       label: "emergency stop / safe shutdown",
+      wireCommand: "EMERGENCY STOP",
       aliases: ["emergency stop", "safe shutdown", "shutdown", "estop", "e-stop"],
       disruptive: true,
       effect: function (sim) {
@@ -130,15 +187,181 @@
         sim.heatingEnabled = false;
         sim.coolingEnabled = false;
         sim.outletValveOpen = true;
+        sim.heaterMask = 0x00;
+        sim.setPressureTrain(false);
+        sim.setPeripheral("outletValve", true);
         sim.forcedFaultTicks = 14;
         return "safe shutdown latched; loads disabled and outlet opened";
       }
     },
     pingExperiment: {
       label: "ping experiment",
+      wireCommand: "PING",
       aliases: ["ping experiment", "ping", "heartbeat"],
       effect: function () {
         return "experiment heartbeat returned";
+      }
+    },
+    relay1On: {
+      label: "turn PDB relay 1 on",
+      wireCommand: "RELAY 1 ON",
+      aliases: ["relay 1 on", "pdb relay 1 on", "relay one on"],
+      stateTarget: { group: "relays", key: "relay1", value: true },
+      effect: function (sim) {
+        sim.setRelay("relay1", true);
+        return RELAY_LINES[0].pin + " commanded on";
+      }
+    },
+    relay1Off: {
+      label: "turn PDB relay 1 off",
+      wireCommand: "RELAY 1 OFF",
+      aliases: ["relay 1 off", "pdb relay 1 off", "relay one off"],
+      stateTarget: { group: "relays", key: "relay1", value: false },
+      effect: function (sim) {
+        sim.setRelay("relay1", false);
+        return RELAY_LINES[0].pin + " commanded off";
+      }
+    },
+    relay2On: {
+      label: "turn PDB relay 2 on",
+      wireCommand: "RELAY 2 ON",
+      aliases: ["relay 2 on", "pdb relay 2 on", "relay two on"],
+      stateTarget: { group: "relays", key: "relay2", value: true },
+      effect: function (sim) {
+        sim.setRelay("relay2", true);
+        return RELAY_LINES[1].pin + " commanded on";
+      }
+    },
+    relay2Off: {
+      label: "turn PDB relay 2 off",
+      wireCommand: "RELAY 2 OFF",
+      aliases: ["relay 2 off", "pdb relay 2 off", "relay two off"],
+      stateTarget: { group: "relays", key: "relay2", value: false },
+      effect: function (sim) {
+        sim.setRelay("relay2", false);
+        return RELAY_LINES[1].pin + " commanded off";
+      }
+    },
+    relay3On: {
+      label: "turn PDB relay 3 on",
+      wireCommand: "RELAY 3 ON",
+      aliases: ["relay 3 on", "pdb relay 3 on", "relay three on"],
+      stateTarget: { group: "relays", key: "relay3", value: true },
+      effect: function (sim) {
+        sim.setRelay("relay3", true);
+        return RELAY_LINES[2].pin + " commanded on";
+      }
+    },
+    relay3Off: {
+      label: "turn PDB relay 3 off",
+      wireCommand: "RELAY 3 OFF",
+      aliases: ["relay 3 off", "pdb relay 3 off", "relay three off"],
+      stateTarget: { group: "relays", key: "relay3", value: false },
+      effect: function (sim) {
+        sim.setRelay("relay3", false);
+        return RELAY_LINES[2].pin + " commanded off";
+      }
+    },
+    relay4On: {
+      label: "turn PDB relay 4 on",
+      wireCommand: "RELAY 4 ON",
+      aliases: ["relay 4 on", "pdb relay 4 on", "relay four on"],
+      stateTarget: { group: "relays", key: "relay4", value: true },
+      effect: function (sim) {
+        sim.setRelay("relay4", true);
+        return RELAY_LINES[3].pin + " commanded on";
+      }
+    },
+    relay4Off: {
+      label: "turn PDB relay 4 off",
+      wireCommand: "RELAY 4 OFF",
+      aliases: ["relay 4 off", "pdb relay 4 off", "relay four off"],
+      stateTarget: { group: "relays", key: "relay4", value: false },
+      effect: function (sim) {
+        sim.setRelay("relay4", false);
+        return RELAY_LINES[3].pin + " commanded off";
+      }
+    },
+    pump1On: {
+      label: "turn vacuum pump 1 on",
+      wireCommand: "PUMP 1 ON",
+      aliases: ["pump 1 on", "vacuum pump 1 on", "vac pump 1 on"],
+      stateTarget: { group: "peripherals", key: "pump1", value: true },
+      effect: function (sim) {
+        sim.setPeripheral("pump1", true);
+        return "vacuum pump 1 commanded on";
+      }
+    },
+    pump1Off: {
+      label: "turn vacuum pump 1 off",
+      wireCommand: "PUMP 1 OFF",
+      aliases: ["pump 1 off", "vacuum pump 1 off", "vac pump 1 off"],
+      stateTarget: { group: "peripherals", key: "pump1", value: false },
+      effect: function (sim) {
+        sim.setPeripheral("pump1", false);
+        return "vacuum pump 1 commanded off";
+      }
+    },
+    pump2On: {
+      label: "turn vacuum pump 2 on",
+      wireCommand: "PUMP 2 ON",
+      aliases: ["pump 2 on", "vacuum pump 2 on", "vac pump 2 on"],
+      stateTarget: { group: "peripherals", key: "pump2", value: true },
+      effect: function (sim) {
+        sim.setPeripheral("pump2", true);
+        return "vacuum pump 2 commanded on";
+      }
+    },
+    pump2Off: {
+      label: "turn vacuum pump 2 off",
+      wireCommand: "PUMP 2 OFF",
+      aliases: ["pump 2 off", "vacuum pump 2 off", "vac pump 2 off"],
+      stateTarget: { group: "peripherals", key: "pump2", value: false },
+      effect: function (sim) {
+        sim.setPeripheral("pump2", false);
+        return "vacuum pump 2 commanded off";
+      }
+    },
+    compressorOn: {
+      label: "turn compressor on",
+      wireCommand: "COMPRESSOR ON",
+      aliases: ["compressor on"],
+      stateTarget: { group: "peripherals", key: "compressor", value: true },
+      effect: function (sim) {
+        sim.setPeripheral("compressor", true);
+        return "compressor commanded on";
+      }
+    },
+    compressorOff: {
+      label: "turn compressor off",
+      wireCommand: "COMPRESSOR OFF",
+      aliases: ["compressor off"],
+      stateTarget: { group: "peripherals", key: "compressor", value: false },
+      effect: function (sim) {
+        sim.setPeripheral("compressor", false);
+        return "compressor commanded off";
+      }
+    },
+    outletValveOpen: {
+      label: "open outlet valve override",
+      wireCommand: "VALVE OPEN",
+      aliases: ["valve open", "outlet valve open", "manual valve open"],
+      stateTarget: { group: "peripherals", key: "outletValve", value: true },
+      effect: function (sim) {
+        sim.outletValveOpen = true;
+        sim.setPeripheral("outletValve", true);
+        return "outlet valve manual override open";
+      }
+    },
+    outletValveClose: {
+      label: "close outlet valve override",
+      wireCommand: "VALVE CLOSE",
+      aliases: ["valve close", "valve closed", "outlet valve close", "outlet valve closed", "manual valve close"],
+      stateTarget: { group: "peripherals", key: "outletValve", value: false },
+      effect: function (sim) {
+        sim.outletValveOpen = false;
+        sim.setPeripheral("outletValve", false);
+        return "outlet valve manual override closed";
       }
     }
   };
@@ -168,10 +391,32 @@
     terminalForm: document.getElementById("terminalForm"),
     terminalInput: document.getElementById("terminalInput"),
     terminalRoute: document.getElementById("terminalRoute"),
+    telemetryView: document.getElementById("telemetryView"),
+    systemOverviewView: document.getElementById("systemOverviewView"),
+    telemetryViewButton: document.getElementById("telemetryViewButton"),
+    overviewViewButton: document.getElementById("overviewViewButton"),
     gasChart: document.getElementById("gasChart"),
     pressureChart: document.getElementById("pressureChart"),
     thermalChart: document.getElementById("thermalChart"),
-    linkChart: document.getElementById("linkChart")
+    linkChart: document.getElementById("linkChart"),
+    diagramAmbientValue: document.getElementById("diagramAmbientValue"),
+    diagramPreheaterValue: document.getElementById("diagramPreheaterValue"),
+    diagramPump1Value: document.getElementById("diagramPump1Value"),
+    diagramPump2Value: document.getElementById("diagramPump2Value"),
+    diagramCompressorValue: document.getElementById("diagramCompressorValue"),
+    diagramChamberValue: document.getElementById("diagramChamberValue"),
+    diagramValveValue: document.getElementById("diagramValveValue"),
+    diagramLinkValue: document.getElementById("diagramLinkValue"),
+    diagramMainValue: document.getElementById("diagramMainValue"),
+    diagramPressureMcuValue: document.getElementById("diagramPressureMcuValue"),
+    diagramThermalMcuValue: document.getElementById("diagramThermalMcuValue"),
+    diagramStorageValue: document.getElementById("diagramStorageValue"),
+    diagramHeaterValue: document.getElementById("diagramHeaterValue"),
+    diagramCoolerValue: document.getElementById("diagramCoolerValue"),
+    diagramRelay1Value: document.getElementById("diagramRelay1Value"),
+    diagramRelay2Value: document.getElementById("diagramRelay2Value"),
+    diagramRelay3Value: document.getElementById("diagramRelay3Value"),
+    diagramRelay4Value: document.getElementById("diagramRelay4Value")
   };
 
   const commandAliases = buildCommandAliases(COMMANDS);
@@ -180,6 +425,23 @@
   let lastGoodFrameAt = 0;
   let previousHealth = "unknown";
   let previousLinkStatus = "unknown";
+  let usingGateway = false;
+  const commandedState = {
+    relays: {
+      relay1: false,
+      relay2: false,
+      relay3: false,
+      relay4: false
+    },
+    peripherals: {
+      pump1: false,
+      pump2: false,
+      compressor: false,
+      outletValve: false
+    },
+    heaterMask: DEFAULT_HEATER_MASK,
+    coolerMask: 0x00
+  };
 
   class OperationsLog {
     constructor(feedElement) {
@@ -271,6 +533,19 @@
       this.outletValveOpen = false;
       this.heatingEnabled = true;
       this.coolingEnabled = false;
+      this.heaterMask = DEFAULT_HEATER_MASK;
+      this.relays = {
+        relay1: false,
+        relay2: false,
+        relay3: false,
+        relay4: false
+      };
+      this.peripherals = {
+        pump1: false,
+        pump2: false,
+        compressor: false,
+        outletValve: false
+      };
       this.emergencyStopped = false;
       this.controllerRebootTicks = 0;
       this.flushTicks = 0;
@@ -292,6 +567,31 @@
         latencyMs: 74,
         storageFreePct: 93
       };
+    }
+
+    setRelay(relayId, enabled) {
+      if (Object.prototype.hasOwnProperty.call(this.relays, relayId)) {
+        this.relays[relayId] = Boolean(enabled);
+      }
+    }
+
+    setPeripheral(peripheralId, enabled) {
+      if (Object.prototype.hasOwnProperty.call(this.peripherals, peripheralId)) {
+        this.peripherals[peripheralId] = Boolean(enabled);
+      }
+
+      if (peripheralId === "outletValve") {
+        this.outletValveOpen = Boolean(enabled);
+      }
+
+      this.pressurisationActive = this.peripherals.pump1 || this.peripherals.pump2 || this.peripherals.compressor;
+    }
+
+    setPressureTrain(enabled) {
+      this.peripherals.pump1 = Boolean(enabled);
+      this.peripherals.pump2 = Boolean(enabled);
+      this.peripherals.compressor = Boolean(enabled);
+      this.pressurisationActive = Boolean(enabled);
     }
 
     generateFrame() {
@@ -334,11 +634,17 @@
         humidityRh: this.values.humidityRh,
         ambientPressureHpa: this.values.ambientPressureHpa,
         ambientTempC: this.values.ambientTempC,
-        pumpDutyPct: this.pressurisationActive ? clamp(68 + noise(8), 0, 100) : 0,
-        compressorDutyPct: this.pressurisationActive ? clamp(58 + noise(10), 0, 100) : 0,
+        pumpDutyPct: this.peripherals.pump1 || this.peripherals.pump2 ? clamp(68 + noise(8), 0, 100) : 0,
+        pump1DutyPct: this.peripherals.pump1 ? clamp(68 + noise(8), 0, 100) : 0,
+        pump2DutyPct: this.peripherals.pump2 ? clamp(66 + noise(8), 0, 100) : 0,
+        compressorDutyPct: this.peripherals.compressor ? clamp(58 + noise(10), 0, 100) : 0,
         heaterDutyPct: this.heatingEnabled ? clamp(36 + (22 - this.values.chamberTempC) * 4 + noise(5), 0, 100) : 0,
         coolerDutyPct: this.coolingEnabled ? clamp(26 + (this.values.chamberTempC - 24) * 4 + noise(5), 0, 100) : 0,
         outletValveOpen: this.outletValveOpen,
+        pressureSystemOn: this.pressurisationActive,
+        heaterMask: this.heaterMask,
+        relayLines: Object.assign({}, this.relays),
+        peripherals: Object.assign({}, this.peripherals),
         onboardLogging: true,
         storageFreePct: this.values.storageFreePct,
         controller: "MAIN_MCU_READY",
@@ -431,6 +737,7 @@
         this.values.waterPpm = approach(this.values.waterPpm, 1800, 0.25);
         if (this.flushTicks === 0) {
           this.outletValveOpen = false;
+          this.setPeripheral("outletValve", false);
         }
       }
 
@@ -567,6 +874,9 @@
     }
 
     start() {
+      if (this.timer) {
+        return;
+      }
       this.emit();
       this.timer = window.setInterval(this.emit.bind(this), TELEMETRY_PERIOD_MS);
     }
@@ -574,6 +884,7 @@
     stop() {
       if (this.timer) {
         window.clearInterval(this.timer);
+        this.timer = null;
       }
     }
 
@@ -676,13 +987,232 @@
     }
   }
 
+  class GatewayCommandRouter {
+    constructor() {
+      this.listeners = [];
+    }
+
+    on(listener) {
+      this.listeners.push(listener);
+    }
+
+    emit(event) {
+      this.listeners.forEach(function (listener) {
+        listener(event);
+      });
+    }
+
+    send(commandId, origin) {
+      const definition = COMMANDS[commandId];
+      const requestId = "CMD-" + Math.floor(1000 + Math.random() * 9000);
+
+      if (!definition) {
+        return Promise.reject(new Error("unknown command"));
+      }
+
+      if (!canUseGateway()) {
+        return Promise.reject(new Error("ground-station gateway is unavailable from this page"));
+      }
+
+      this.emit({
+        type: "queued",
+        commandId: commandId,
+        label: definition.label,
+        wireCommand: definition.wireCommand,
+        requestId: requestId,
+        origin: origin,
+        delay: 0
+      });
+
+      return window.fetch("/api/command", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          requestId: requestId,
+          commandId: commandId,
+          label: definition.label,
+          wireCommand: definition.wireCommand
+        })
+      })
+        .then(function (response) {
+          return response.json().then(function (body) {
+            if (!response.ok || !body.ok) {
+              const error = {
+                type: "nack",
+                commandId: commandId,
+                label: definition.label,
+                wireCommand: definition.wireCommand,
+                requestId: requestId,
+                origin: origin,
+                message: body.message || "gateway rejected command"
+              };
+              throw error;
+            }
+
+            return {
+              type: "ack",
+              commandId: commandId,
+              label: definition.label,
+              wireCommand: definition.wireCommand,
+              requestId: requestId,
+              origin: origin,
+              message: body.message || "sent to payload TCP command socket"
+            };
+          });
+        })
+        .then((ack) => {
+          this.emit(ack);
+          return ack;
+        })
+        .catch((error) => {
+          const event = error && error.type === "nack" ? error : {
+            type: "nack",
+            commandId: commandId,
+            label: definition.label,
+            wireCommand: definition.wireCommand,
+            requestId: requestId,
+            origin: origin,
+            message: error && error.message ? error.message : "gateway command send failed"
+          };
+          this.emit(event);
+          return Promise.reject(event);
+        });
+    }
+  }
+
+  class GatewayTelemetrySource {
+    constructor(onFrame, onLogEvent, onConnect, onDisconnect) {
+      this.onFrame = onFrame;
+      this.onLogEvent = onLogEvent;
+      this.onConnect = onConnect;
+      this.onDisconnect = onDisconnect;
+      this.source = null;
+      this.connected = false;
+    }
+
+    start() {
+      if (!canUseGateway() || !window.EventSource) {
+        return false;
+      }
+
+      this.source = new window.EventSource("/api/telemetry");
+      this.source.addEventListener("telemetry", this.handleTelemetry.bind(this));
+      this.source.addEventListener("gateway", this.handleGatewayEvent.bind(this));
+      this.source.onerror = this.handleError.bind(this);
+      return true;
+    }
+
+    stop() {
+      if (this.source) {
+        this.source.close();
+        this.source = null;
+      }
+      this.connected = false;
+    }
+
+    handleTelemetry(event) {
+      let sample;
+      try {
+        sample = JSON.parse(event.data);
+      } catch (error) {
+        this.onLogEvent("warn", "Gateway telemetry rejected", "received malformed JSON from local gateway");
+        return;
+      }
+
+      if (!this.connected) {
+        this.connected = true;
+        this.onConnect();
+      }
+
+      this.onFrame(sample);
+      this.logFrame(sample);
+    }
+
+    handleGatewayEvent(event) {
+      let status;
+      try {
+        status = JSON.parse(event.data);
+      } catch (error) {
+        return;
+      }
+
+      if (status.payloadConnected) {
+        if (activeCommandRouter !== gatewayCommandRouter) {
+          activeCommandRouter = gatewayCommandRouter;
+          terminal.write("payload TCP command socket connected through local gateway.");
+          this.onLogEvent("info", "Payload command socket connected", "GUI commands now route to the local gateway");
+        }
+
+        if (!this.connected) {
+          this.onLogEvent("info", "E-Link gateway ready", "waiting for first decoded payload status frame");
+        }
+        return;
+      }
+
+      if (activeCommandRouter === gatewayCommandRouter) {
+        activeCommandRouter = mockCommandRouter;
+        terminal.write("payload command socket disconnected; local mock command route resumed", "warn");
+        this.onLogEvent("dropout", "Payload command socket disconnected", "GUI commands are back on the local mock route");
+      }
+
+      if (this.connected) {
+        this.connected = false;
+        this.onDisconnect();
+      }
+    }
+
+    handleError() {
+      if (this.connected) {
+        this.onLogEvent("dropout", "Ground-station gateway disconnected", "browser SSE stream dropped; local mock telemetry resumed");
+        this.connected = false;
+        this.onDisconnect();
+      }
+    }
+
+    logFrame(sample) {
+      if (!sample.valid) {
+        if (previousLinkStatus !== "DROPOUT") {
+          this.onLogEvent("dropout", "Telemetry dropout", sample.dropoutReason + "; operator view is holding last valid data");
+        }
+        previousLinkStatus = "DROPOUT";
+        return;
+      }
+
+      this.onLogEvent("info", "Telemetry frame " + sample.seq + " received", sample.statusText || "payload status packet decoded");
+
+      if (previousLinkStatus === "DROPOUT") {
+        this.onLogEvent("info", "E-Link recovered", "live telemetry resumed at frame " + sample.seq);
+      }
+
+      if (sample.health !== previousHealth && previousHealth !== "unknown") {
+        const level = sample.health === "healthy" ? "info" : sample.health === "warning" ? "warn" : "fault";
+        this.onLogEvent(level, "Health state changed", "system is now " + sample.health.toUpperCase());
+      }
+
+      previousHealth = sample.health;
+      previousLinkStatus = sample.linkStatus;
+    }
+  }
+
   const log = new OperationsLog(dom.logFeed);
   const terminal = new Terminal(dom.terminalOutput);
   const simulator = new MockMirageSimulator();
-  const commandRouter = new MockCommandRouter(simulator);
-  const telemetrySource = new MockTelemetrySource(simulator, handleFrame, function (level, title, message) {
+  const mockCommandRouter = new MockCommandRouter(simulator);
+  const gatewayCommandRouter = new GatewayCommandRouter();
+  const mockTelemetrySource = new MockTelemetrySource(simulator, handleFrame, function (level, title, message) {
     log.add(level, title, message);
   });
+  const gatewayTelemetrySource = new GatewayTelemetrySource(
+    handleFrame,
+    function (level, title, message) {
+      log.add(level, title, message);
+    },
+    handleGatewayConnected,
+    handleGatewayDisconnected
+  );
+  let activeCommandRouter = mockCommandRouter;
 
   function init() {
     terminal.write("MIRAGE ground-station terminal ready on local mock route.");
@@ -691,8 +1221,11 @@
 
     bindCommands();
     bindTerminal();
-    commandRouter.on(handleCommandEvent);
-    telemetrySource.start();
+    bindViewSwitch();
+    mockCommandRouter.on(handleCommandEvent);
+    gatewayCommandRouter.on(handleCommandEvent);
+    mockTelemetrySource.start();
+    gatewayTelemetrySource.start();
     window.setInterval(updateFrameAge, 1000);
     window.addEventListener("resize", drawAllCharts);
   }
@@ -702,6 +1235,27 @@
       button.addEventListener("click", function () {
         const commandId = button.dataset.command;
         if (button.dataset.confirm && !window.confirm(button.dataset.confirm)) {
+          return;
+        }
+
+        button.disabled = true;
+        sendCommand(commandId, "button")
+          .catch(function () {
+            return undefined;
+          })
+          .finally(function () {
+            button.disabled = false;
+          });
+      });
+    });
+
+    document.querySelectorAll("[data-toggle]").forEach(function (button) {
+      button.addEventListener("click", function () {
+        const pressed = button.getAttribute("aria-pressed") === "true";
+        const commandId = pressed ? button.dataset.commandOff : button.dataset.commandOn;
+        const confirmMessage = pressed ? button.dataset.confirmOff : button.dataset.confirmOn;
+
+        if (confirmMessage && !window.confirm(confirmMessage)) {
           return;
         }
 
@@ -731,11 +1285,21 @@
     });
   }
 
+  function bindViewSwitch() {
+    dom.telemetryViewButton.addEventListener("click", function () {
+      setTelemetryPanelView("telemetry");
+    });
+
+    dom.overviewViewButton.addEventListener("click", function () {
+      setTelemetryPanelView("overview");
+    });
+  }
+
   function handleTerminalCommand(raw) {
     const normalized = normalizeCommand(raw);
 
     if (normalized === "help") {
-      terminal.write("commands: status, clear, start experiment, enter standby, start/stop pressurisation, open/close outlet valve, enable/disable heating, enable/disable cooling, flush chamber, restart main controller, emergency stop, ping experiment");
+      terminal.write("commands: status, clear, start experiment, enter standby, start/stop pressurisation, open/close outlet valve, relay 1-4 on/off, pump 1/2 on/off, compressor on/off, enable/disable heating, enable/disable cooling, flush chamber, restart main controller, emergency stop, ping experiment");
       return;
     }
 
@@ -757,7 +1321,8 @@
       return;
     }
 
-    if (COMMANDS[commandId].disruptive && !window.confirm("Route '" + COMMANDS[commandId].label + "' through mock uplink?")) {
+    const routeName = activeCommandRouter === gatewayCommandRouter ? "payload gateway" : "mock uplink";
+    if (COMMANDS[commandId].disruptive && !window.confirm("Route '" + COMMANDS[commandId].label + "' through " + routeName + "?")) {
       terminal.write("manual command cancelled locally", "warn");
       return;
     }
@@ -769,14 +1334,15 @@
 
   function sendCommand(commandId, origin) {
     dom.commandStatus.textContent = "Uplink pending";
-    return commandRouter.send(commandId, origin).catch(function (error) {
+    return activeCommandRouter.send(commandId, origin).catch(function (error) {
       return Promise.reject(error);
     });
   }
 
   function handleCommandEvent(event) {
     if (event.type === "queued") {
-      const message = event.label + " queued as " + event.requestId + " from " + event.origin + "; mock delay " + event.delay + " ms";
+      const route = activeCommandRouter === gatewayCommandRouter && event.wireCommand ? "; wire command " + event.wireCommand : "; mock delay " + event.delay + " ms";
+      const message = event.label + " queued as " + event.requestId + " from " + event.origin + route;
       log.add("command", "Uplink queued", message);
       if (event.origin === "terminal") {
         terminal.write("QUEUED " + event.requestId + " " + event.label);
@@ -785,6 +1351,9 @@
     }
 
     if (event.type === "ack") {
+      applyCommandedState(event.commandId);
+      renderActuatorState(latestTelemetry);
+      renderSystemOverview(latestTelemetry);
       dom.commandStatus.textContent = "ACK " + event.requestId;
       log.add("command", "Command acknowledged", event.requestId + " " + event.label + "; " + event.message);
       if (event.origin === "terminal") {
@@ -837,7 +1406,9 @@
     dom.latencyValue.textContent = sample.valid ? sample.latencyMs + " ms" : "--";
     dom.storageState.textContent = display && display.onboardLogging ? "SD " + display.storageFreePct.toFixed(0) + "% free" : "SD logging";
     dom.controllerState.textContent = sample.controller === "MAIN_MCU_REBOOTING" ? "Main MCU rebooting" : sample.controller === "LINK_DROP" ? "awaiting frame" : "Main MCU ready";
-    dom.terminalRoute.textContent = linkStatus === "DROPOUT" ? "mock route degraded" : "local mock route";
+    dom.terminalRoute.textContent = activeCommandRouter === gatewayCommandRouter
+      ? (linkStatus === "DROPOUT" ? "gateway route degraded" : "payload TCP route")
+      : (linkStatus === "DROPOUT" ? "mock route degraded" : "local mock route");
 
     if (display) {
       dom.methaneValue.textContent = display.methanePpm.toFixed(2);
@@ -853,6 +1424,8 @@
       setMetricState(dom.metricLink, linkStatus === "DROPOUT" ? "dropout" : linkQuality < 75 ? "warning" : "healthy");
     }
 
+    renderActuatorState(display);
+    renderSystemOverview(display, health, linkStatus);
     updateFrameAge();
   }
 
@@ -864,6 +1437,297 @@
 
     const seconds = Math.max(0, Math.round((Date.now() - lastGoodFrameAt) / 1000));
     dom.lastFrameAge.textContent = seconds === 0 ? "now" : seconds + " s ago";
+  }
+
+  function setTelemetryPanelView(view) {
+    const showOverview = view === "overview";
+
+    dom.telemetryView.hidden = showOverview;
+    dom.systemOverviewView.hidden = !showOverview;
+    dom.telemetryViewButton.classList.toggle("active", !showOverview);
+    dom.overviewViewButton.classList.toggle("active", showOverview);
+    dom.telemetryViewButton.setAttribute("aria-pressed", String(!showOverview));
+    dom.overviewViewButton.setAttribute("aria-pressed", String(showOverview));
+
+    if (showOverview) {
+      renderSystemOverview(latestTelemetry);
+    } else {
+      window.requestAnimationFrame(drawAllCharts);
+    }
+  }
+
+  function handleGatewayConnected() {
+    if (usingGateway) {
+      return;
+    }
+
+    usingGateway = true;
+    activeCommandRouter = gatewayCommandRouter;
+    mockTelemetrySource.stop();
+    history.length = 0;
+    latestTelemetry = null;
+    lastGoodFrameAt = 0;
+    previousHealth = "unknown";
+    previousLinkStatus = "unknown";
+    terminal.write("E-Link gateway connected; telemetry is now decoded from the payload TCP status stream.");
+    log.add("info", "Live gateway connected", "local Python gateway replaced mock telemetry and mock uplink routing");
+  }
+
+  function handleGatewayDisconnected() {
+    if (!usingGateway) {
+      return;
+    }
+
+    usingGateway = false;
+    activeCommandRouter = mockCommandRouter;
+    mockTelemetrySource.start();
+    terminal.write("gateway disconnected; local mock route resumed", "warn");
+  }
+
+  function applyCommandedState(commandId) {
+    const definition = COMMANDS[commandId];
+    if (!definition) {
+      return;
+    }
+
+    if (definition.stateTarget) {
+      commandedState[definition.stateTarget.group][definition.stateTarget.key] = definition.stateTarget.value;
+      return;
+    }
+
+    if (commandId === "startExperiment" || commandId === "startPressurisation" || commandId === "flushChamber") {
+      setCommandedPressureTrain(true);
+    }
+
+    if (commandId === "enterStandby" || commandId === "stopPressurisation" || commandId === "restartController") {
+      setCommandedPressureTrain(false);
+    }
+
+    if (commandId === "openOutletValve" || commandId === "flushChamber" || commandId === "emergencyStop") {
+      commandedState.peripherals.outletValve = true;
+    }
+
+    if (commandId === "closeOutletValve" || commandId === "startPressurisation" || commandId === "startExperiment") {
+      commandedState.peripherals.outletValve = false;
+    }
+
+    if (commandId === "enableHeating") {
+      commandedState.heaterMask |= DEFAULT_HEATER_MASK;
+    }
+
+    if (commandId === "disableHeating" || commandId === "emergencyStop") {
+      commandedState.heaterMask &= ~DEFAULT_HEATER_MASK;
+    }
+
+    if (commandId === "enableCooling") {
+      commandedState.coolerMask = DEFAULT_COOLER_MASK;
+    }
+
+    if (commandId === "disableCooling" || commandId === "emergencyStop") {
+      commandedState.coolerMask = 0x00;
+    }
+
+    if (commandId === "emergencyStop") {
+      setCommandedPressureTrain(false);
+    }
+  }
+
+  function setCommandedPressureTrain(enabled) {
+    commandedState.peripherals.pump1 = Boolean(enabled);
+    commandedState.peripherals.pump2 = Boolean(enabled);
+    commandedState.peripherals.compressor = Boolean(enabled);
+  }
+
+  function renderActuatorState(sample) {
+    const state = extractSystemState(sample);
+
+    document.querySelectorAll("[data-toggle]").forEach(function (button) {
+      const id = button.dataset.toggle;
+      const active = Object.prototype.hasOwnProperty.call(state.relays, id) ? state.relays[id] : state.peripherals[id];
+      const metadata = PRESSURE_PERIPHERALS.find(function (item) {
+        return item.id === id;
+      });
+      const label = metadata ? (active ? metadata.onLabel : metadata.offLabel) : (active ? "ON" : "OFF");
+
+      button.classList.toggle("is-active", Boolean(active));
+      button.setAttribute("aria-pressed", String(Boolean(active)));
+
+      const stateLabel = button.querySelector("small");
+      if (stateLabel) {
+        stateLabel.textContent = label;
+      }
+    });
+  }
+
+  function renderSystemOverview(sample, healthOverride, linkOverride) {
+    const state = extractSystemState(sample);
+    const linkStatus = linkOverride || (sample ? sample.linkStatus : previousLinkStatus);
+    const health = healthOverride || (sample ? sample.health : previousHealth);
+    const pressureActive = state.peripherals.pump1 || state.peripherals.pump2 || state.peripherals.compressor || Boolean(sample && sample.pressureSystemOn);
+    const heaterActive = (state.heaterMask & DEFAULT_HEATER_MASK) !== 0 || Boolean(sample && sample.heatingEnabled);
+    const coolerActive = (state.heaterMask & DEFAULT_COOLER_MASK) !== 0 || state.coolerMask !== 0 || Boolean(sample && sample.coolingEnabled);
+    const chamberState = sample ? worstState([
+      pressureState(sample.chamberPressureBar),
+      temperatureState(sample.chamberTempC),
+      humidityState(sample.humidityRh)
+    ]) : "neutral";
+    const linkState = linkStatus === "DROPOUT" ? "dropout" : linkStatus === "DEGRADED" ? "warn" : "on";
+    const mainState = linkStatus === "DROPOUT" ? "dropout" : health === "fault" ? "fault" : health === "warning" ? "warn" : "on";
+    const thermalState = sample && sample.thermalOnline === false ? "fault" : sample && sample.thermalError ? "warn" : "on";
+
+    setDiagramNodeState("diagramElLink", linkState);
+    setDiagramNodeState("diagramMainMcu", mainState);
+    setDiagramNodeState("diagramPressureMcu", pressureActive ? "on" : "off");
+    setDiagramNodeState("diagramThermalMcu", thermalState);
+    setDiagramNodeState("diagramPreheater", heaterActive ? "on" : "off");
+    setDiagramNodeState("diagramPump1", state.peripherals.pump1 ? "on" : "off");
+    setDiagramNodeState("diagramPump2", state.peripherals.pump2 ? "on" : "off");
+    setDiagramNodeState("diagramCompressor", state.peripherals.compressor ? "on" : "off");
+    setDiagramNodeState("diagramChamber", chamberState === "healthy" ? "on" : chamberState);
+    setDiagramNodeState("diagramOutletValve", state.peripherals.outletValve ? "on" : "off");
+    setDiagramNodeState("diagramStorage", sample && sample.storageFreePct < 20 ? "warn" : "on");
+    setDiagramNodeState("diagramHeaters", heaterActive ? "on" : "off");
+    setDiagramNodeState("diagramCooler", coolerActive ? "on" : "off");
+
+    setDiagramLineState("flowIntakePreheater", heaterActive ? "on" : "off");
+    setDiagramLineState("flowPreheaterPump1", state.peripherals.pump1 ? "on" : "off");
+    setDiagramLineState("flowPump1Pump2", state.peripherals.pump1 && state.peripherals.pump2 ? "on" : "off");
+    setDiagramLineState("flowPump2Compressor", state.peripherals.pump2 && state.peripherals.compressor ? "on" : "off");
+    setDiagramLineState("flowCompressorChamber", state.peripherals.compressor ? "on" : "off");
+    setDiagramLineState("flowChamberValve", state.peripherals.outletValve ? "on" : "off");
+    setDiagramLineState("flowValveOutlet", state.peripherals.outletValve ? "on" : "off");
+    setDiagramLineState("busMainLink", linkState);
+    setDiagramLineState("busMainPressure", pressureActive ? "on" : "off");
+    setDiagramLineState("busPressureThermal", thermalState);
+    setDiagramLineState("busThermalHeaters", heaterActive || coolerActive ? "on" : "off");
+    setDiagramLineState("busMainStorage", "on");
+
+    RELAY_LINES.forEach(function (relay, index) {
+      const element = document.getElementById("diagramRelay" + (index + 1));
+      if (element) {
+        element.classList.toggle("is-on", Boolean(state.relays[relay.id]));
+      }
+      setText(dom["diagramRelay" + (index + 1) + "Value"], "R" + (index + 1) + " " + (state.relays[relay.id] ? "ON" : "OFF"));
+    });
+
+    setText(dom.diagramAmbientValue, sample ? sample.ambientPressureHpa.toFixed(0) + " hPa" : "-- hPa");
+    setText(dom.diagramPreheaterValue, heaterActive ? "ACTIVE" : "OFF");
+    setText(dom.diagramPump1Value, state.peripherals.pump1 ? "ON" : "OFF");
+    setText(dom.diagramPump2Value, state.peripherals.pump2 ? "ON" : "OFF");
+    setText(dom.diagramCompressorValue, state.peripherals.compressor ? "ON" : "OFF");
+    setText(dom.diagramChamberValue, sample ? sample.chamberPressureBar.toFixed(2) + " bar / " + sample.chamberTempC.toFixed(1) + " C" : "-- bar / -- C");
+    setText(dom.diagramValveValue, state.peripherals.outletValve ? "OPEN" : "CLOSED");
+    setText(dom.diagramLinkValue, linkLabel(linkStatus).replace("E-Link ", "").toUpperCase());
+    setText(dom.diagramMainValue, health === "unknown" ? "READY" : health.toUpperCase());
+    setText(dom.diagramPressureMcuValue, pressureActive ? "ACTIVE" : "STANDBY");
+    setText(dom.diagramThermalMcuValue, sample && sample.thermalOnline === false ? "OFFLINE" : sample && sample.thermalError ? "WARN" : "ONLINE");
+    setText(dom.diagramStorageValue, sample ? sample.storageFreePct.toFixed(0) + "% FREE" : "--");
+    setText(dom.diagramHeaterValue, heaterActive ? describeMask(state.heaterMask & DEFAULT_HEATER_MASK) : "OFF");
+    setText(dom.diagramCoolerValue, coolerActive ? "ACTIVE" : "OFF");
+  }
+
+  function extractSystemState(sample) {
+    const relays = Object.assign({}, commandedState.relays);
+    const peripherals = Object.assign({}, commandedState.peripherals);
+    let heaterMask = commandedState.heaterMask | commandedState.coolerMask;
+
+    if (sample) {
+      if (sample.relayLines) {
+        Object.assign(relays, sample.relayLines);
+      }
+
+      if (sample.peripherals) {
+        Object.assign(peripherals, sample.peripherals);
+      } else if (typeof sample.pressureSystemOn === "boolean") {
+        peripherals.pump1 = sample.pressureSystemOn;
+        peripherals.pump2 = sample.pressureSystemOn;
+        peripherals.compressor = sample.pressureSystemOn;
+      }
+
+      if (typeof sample.outletValveOpen === "boolean") {
+        peripherals.outletValve = sample.outletValveOpen;
+      }
+
+      if (typeof sample.heaterMask === "number") {
+        heaterMask = sample.heaterMask | commandedState.coolerMask;
+      }
+    }
+
+    return {
+      relays: relays,
+      peripherals: peripherals,
+      heaterMask: heaterMask,
+      coolerMask: commandedState.coolerMask
+    };
+  }
+
+  function setDiagramNodeState(id, state) {
+    const element = document.getElementById(id);
+    if (!element) {
+      return;
+    }
+
+    element.classList.remove("is-on", "is-off", "is-warn", "is-fault", "is-dropout");
+    if (state === "on" || state === "healthy") {
+      element.classList.add("is-on");
+    } else if (state === "warn" || state === "warning") {
+      element.classList.add("is-warn");
+    } else if (state === "fault") {
+      element.classList.add("is-fault");
+    } else if (state === "dropout") {
+      element.classList.add("is-dropout");
+    } else {
+      element.classList.add("is-off");
+    }
+  }
+
+  function setDiagramLineState(id, state) {
+    const element = document.getElementById(id);
+    if (!element) {
+      return;
+    }
+
+    element.classList.remove("is-on", "is-warn", "is-fault", "is-dropout");
+    if (state === "on" || state === "healthy") {
+      element.classList.add("is-on");
+    } else if (state === "warn" || state === "warning") {
+      element.classList.add("is-warn");
+    } else if (state === "fault") {
+      element.classList.add("is-fault");
+    } else if (state === "dropout") {
+      element.classList.add("is-dropout");
+    }
+  }
+
+  function worstState(states) {
+    if (states.indexOf("fault") !== -1) {
+      return "fault";
+    }
+    if (states.indexOf("warning") !== -1) {
+      return "warn";
+    }
+    if (states.indexOf("dropout") !== -1) {
+      return "dropout";
+    }
+    return "healthy";
+  }
+
+  function describeMask(mask) {
+    const active = THERMAL_CHANNELS
+      .filter(function (channel) {
+        return (mask & (1 << channel.bit)) !== 0;
+      })
+      .map(function (channel) {
+        return "CH" + channel.bit;
+      });
+
+    return active.length ? active.join(",") : "OFF";
+  }
+
+  function setText(element, value) {
+    if (element) {
+      element.textContent = value;
+    }
   }
 
   function drawAllCharts() {
@@ -1133,6 +1997,10 @@
       "RH=" + sample.humidityRh.toFixed(0) + "%",
       "LINK=" + sample.linkStatus
     ].join(" ");
+  }
+
+  function canUseGateway() {
+    return window.location.protocol === "http:" || window.location.protocol === "https:";
   }
 
   function buildCommandAliases(commands) {

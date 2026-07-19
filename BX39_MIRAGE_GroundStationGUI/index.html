@@ -46,69 +46,216 @@
             <p class="eyebrow">1 Hz mock downlink</p>
             <h2 id="telemetry-title">Live Telemetry</h2>
           </div>
-          <div class="telemetry-counters">
-            <span>Frame <strong id="frameNumber">--</strong></span>
-            <span>Latency <strong id="latencyValue">--</strong></span>
+          <div class="telemetry-header-tools">
+            <div class="view-switch" aria-label="Telemetry panel view">
+              <button id="telemetryViewButton" type="button" class="active" data-view="telemetry" aria-pressed="true">Telemetry</button>
+              <button id="overviewViewButton" type="button" data-view="overview" aria-pressed="false">System</button>
+            </div>
+            <div class="telemetry-counters">
+              <span>Frame <strong id="frameNumber">--</strong></span>
+              <span>Latency <strong id="latencyValue">--</strong></span>
+            </div>
           </div>
         </header>
 
-        <div class="quick-metrics" aria-label="Key live telemetry values">
-          <article class="metric" id="metricMethane">
-            <span>CH4</span>
-            <strong id="methaneValue">--</strong>
-            <small>ppm</small>
-          </article>
-          <article class="metric" id="metricPressure">
-            <span>Chamber pressure</span>
-            <strong id="chamberPressureValue">--</strong>
-            <small>bar</small>
-          </article>
-          <article class="metric" id="metricTemperature">
-            <span>Chamber temp</span>
-            <strong id="chamberTempValue">--</strong>
-            <small>deg C</small>
-          </article>
-          <article class="metric" id="metricHumidity">
-            <span>Humidity</span>
-            <strong id="humidityValue">--</strong>
-            <small>% RH</small>
-          </article>
-          <article class="metric" id="metricLink">
-            <span>Link quality</span>
-            <strong id="linkQualityValue">--</strong>
-            <small>%</small>
-          </article>
+        <div id="telemetryView" class="telemetry-view">
+          <div class="quick-metrics" aria-label="Key live telemetry values">
+            <article class="metric" id="metricMethane">
+              <span>CH4</span>
+              <strong id="methaneValue">--</strong>
+              <small>ppm</small>
+            </article>
+            <article class="metric" id="metricPressure">
+              <span>Chamber pressure</span>
+              <strong id="chamberPressureValue">--</strong>
+              <small>bar</small>
+            </article>
+            <article class="metric" id="metricTemperature">
+              <span>Chamber temp</span>
+              <strong id="chamberTempValue">--</strong>
+              <small>deg C</small>
+            </article>
+            <article class="metric" id="metricHumidity">
+              <span>Humidity</span>
+              <strong id="humidityValue">--</strong>
+              <small>% RH</small>
+            </article>
+            <article class="metric" id="metricLink">
+              <span>Link quality</span>
+              <strong id="linkQualityValue">--</strong>
+              <small>%</small>
+            </article>
+          </div>
+
+          <div class="chart-grid">
+            <article class="chart-card">
+              <div class="chart-head">
+                <h3>Gas Sensor</h3>
+                <span><i class="legend-dot methane"></i>CH4 <i class="legend-dot co2"></i>CO2 <i class="legend-dot water"></i>H2O</span>
+              </div>
+              <canvas id="gasChart" aria-label="Gas concentration trend"></canvas>
+            </article>
+            <article class="chart-card">
+              <div class="chart-head">
+                <h3>Pressure</h3>
+                <span><i class="legend-dot chamber-pressure"></i>Chamber <i class="legend-dot ambient-pressure"></i>Ambient</span>
+              </div>
+              <canvas id="pressureChart" aria-label="Pressure trend"></canvas>
+            </article>
+            <article class="chart-card">
+              <div class="chart-head">
+                <h3>Thermal / Humidity</h3>
+                <span><i class="legend-dot chamber-temp"></i>Chamber <i class="legend-dot electronics-temp"></i>Electronics <i class="legend-dot humidity"></i>RH</span>
+              </div>
+              <canvas id="thermalChart" aria-label="Thermal and humidity trend"></canvas>
+            </article>
+            <article class="chart-card">
+              <div class="chart-head">
+                <h3>Link / Actuation</h3>
+                <span><i class="legend-dot link"></i>E-Link <i class="legend-dot pump"></i>Pumps <i class="legend-dot thermal"></i>Thermal</span>
+              </div>
+              <canvas id="linkChart" aria-label="Link and actuator trend"></canvas>
+            </article>
+          </div>
         </div>
 
-        <div class="chart-grid">
-          <article class="chart-card">
-            <div class="chart-head">
-              <h3>Gas Sensor</h3>
-              <span><i class="legend-dot methane"></i>CH4 <i class="legend-dot co2"></i>CO2 <i class="legend-dot water"></i>H2O</span>
-            </div>
-            <canvas id="gasChart" aria-label="Gas concentration trend"></canvas>
-          </article>
-          <article class="chart-card">
-            <div class="chart-head">
-              <h3>Pressure</h3>
-              <span><i class="legend-dot chamber-pressure"></i>Chamber <i class="legend-dot ambient-pressure"></i>Ambient</span>
-            </div>
-            <canvas id="pressureChart" aria-label="Pressure trend"></canvas>
-          </article>
-          <article class="chart-card">
-            <div class="chart-head">
-              <h3>Thermal / Humidity</h3>
-              <span><i class="legend-dot chamber-temp"></i>Chamber <i class="legend-dot electronics-temp"></i>Electronics <i class="legend-dot humidity"></i>RH</span>
-            </div>
-            <canvas id="thermalChart" aria-label="Thermal and humidity trend"></canvas>
-          </article>
-          <article class="chart-card">
-            <div class="chart-head">
-              <h3>Link / Actuation</h3>
-              <span><i class="legend-dot link"></i>E-Link <i class="legend-dot pump"></i>Pumps <i class="legend-dot thermal"></i>Thermal</span>
-            </div>
-            <canvas id="linkChart" aria-label="Link and actuator trend"></canvas>
-          </article>
+        <div id="systemOverviewView" class="system-overview-view" hidden>
+          <div class="system-diagram-shell">
+            <svg id="systemDiagram" class="system-diagram" viewBox="0 0 980 560" role="img" aria-labelledby="system-diagram-title system-diagram-desc">
+              <title id="system-diagram-title">MIRAGE system overview</title>
+              <desc id="system-diagram-desc">System flow diagram with live colors for pumps, compressor, outlet valve, relays, thermal control, storage, and E-Link.</desc>
+              <defs>
+                <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                  <path d="M 0 0 L 10 5 L 0 10 z"></path>
+                </marker>
+              </defs>
+
+              <path id="flowIntakePreheater" class="flow-line" d="M72 232 H158"></path>
+              <path id="flowPreheaterPump1" class="flow-line" d="M278 232 H356"></path>
+              <path id="flowPump1Pump2" class="flow-line" d="M476 232 H548"></path>
+              <path id="flowPump2Compressor" class="flow-line" d="M668 232 H740"></path>
+              <path id="flowCompressorChamber" class="flow-line" d="M800 282 V348 H610"></path>
+              <path id="flowChamberValve" class="flow-line" d="M430 398 H246"></path>
+              <path id="flowValveOutlet" class="flow-line" d="M126 398 H72"></path>
+
+              <g id="diagramAmbient" class="diagram-node passive" transform="translate(24 192)">
+                <rect width="112" height="80"></rect>
+                <text x="56" y="32">Ambient</text>
+                <text x="56" y="54" id="diagramAmbientValue">-- hPa</text>
+              </g>
+
+              <g id="diagramPreheater" class="diagram-node" transform="translate(158 192)">
+                <rect width="120" height="80"></rect>
+                <text x="60" y="30">Inlet heat</text>
+                <text x="60" y="54" id="diagramPreheaterValue">OFF</text>
+              </g>
+
+              <g id="diagramPump1" class="diagram-node" transform="translate(356 192)">
+                <rect width="120" height="80"></rect>
+                <text x="60" y="30">Vac pump 1</text>
+                <text x="60" y="54" id="diagramPump1Value">OFF</text>
+              </g>
+
+              <g id="diagramPump2" class="diagram-node" transform="translate(548 192)">
+                <rect width="120" height="80"></rect>
+                <text x="60" y="30">Vac pump 2</text>
+                <text x="60" y="54" id="diagramPump2Value">OFF</text>
+              </g>
+
+              <g id="diagramCompressor" class="diagram-node" transform="translate(740 192)">
+                <rect width="120" height="80"></rect>
+                <text x="60" y="30">Compressor</text>
+                <text x="60" y="54" id="diagramCompressorValue">OFF</text>
+              </g>
+
+              <g id="diagramChamber" class="diagram-node large" transform="translate(430 348)">
+                <rect width="180" height="100"></rect>
+                <text x="90" y="28">3 bar chamber</text>
+                <text x="90" y="52">K96 sensor</text>
+                <text x="90" y="76" id="diagramChamberValue">-- bar / -- C</text>
+              </g>
+
+              <g id="diagramOutletValve" class="diagram-node" transform="translate(126 358)">
+                <rect width="120" height="80"></rect>
+                <text x="60" y="30">Outlet valve</text>
+                <text x="60" y="54" id="diagramValveValue">CLOSED</text>
+              </g>
+
+              <g id="diagramExhaust" class="diagram-node passive" transform="translate(24 358)">
+                <rect width="88" height="80"></rect>
+                <text x="44" y="32">Exhaust</text>
+                <text x="44" y="54" id="diagramExhaustValue">NC path</text>
+              </g>
+
+              <g id="diagramMainMcu" class="diagram-node" transform="translate(360 40)">
+                <rect width="130" height="78"></rect>
+                <text x="65" y="30">Main MCU</text>
+                <text x="65" y="54" id="diagramMainValue">READY</text>
+              </g>
+
+              <g id="diagramPressureMcu" class="diagram-node" transform="translate(552 40)">
+                <rect width="140" height="78"></rect>
+                <text x="70" y="30">Pressure MCU</text>
+                <text x="70" y="54" id="diagramPressureMcuValue">STANDBY</text>
+              </g>
+
+              <g id="diagramThermalMcu" class="diagram-node" transform="translate(744 40)">
+                <rect width="140" height="78"></rect>
+                <text x="70" y="30">Thermal MCU</text>
+                <text x="70" y="54" id="diagramThermalMcuValue">ONLINE</text>
+              </g>
+
+              <g id="diagramElLink" class="diagram-node" transform="translate(84 40)">
+                <rect width="140" height="78"></rect>
+                <text x="70" y="30">E-Link</text>
+                <text x="70" y="54" id="diagramLinkValue">--</text>
+              </g>
+
+              <g id="diagramStorage" class="diagram-node" transform="translate(744 410)">
+                <rect width="140" height="78"></rect>
+                <text x="70" y="30">SD storage</text>
+                <text x="70" y="54" id="diagramStorageValue">--</text>
+              </g>
+
+              <g id="diagramHeaters" class="diagram-node" transform="translate(744 310)">
+                <rect width="140" height="78"></rect>
+                <text x="70" y="30">Heaters</text>
+                <text x="70" y="54" id="diagramHeaterValue">--</text>
+              </g>
+
+              <g id="diagramCooler" class="diagram-node" transform="translate(596 450)">
+                <rect width="120" height="70"></rect>
+                <text x="60" y="28">Peltier</text>
+                <text x="60" y="50" id="diagramCoolerValue">OFF</text>
+              </g>
+
+              <path id="busMainPressure" class="control-line" d="M490 79 H552"></path>
+              <path id="busPressureThermal" class="control-line" d="M692 79 H744"></path>
+              <path id="busMainLink" class="control-line" d="M224 79 H360"></path>
+              <path id="busThermalHeaters" class="control-line" d="M814 118 V310"></path>
+              <path id="busMainStorage" class="control-line" d="M425 118 V502 H744"></path>
+
+              <g class="relay-bank" transform="translate(64 486)">
+                <text class="relay-bank-title" x="0" y="-16">PDB relay lines</text>
+                <line id="diagramRelay1" class="relay-line" x1="0" y1="0" x2="170" y2="0"></line>
+                <line id="diagramRelay2" class="relay-line" x1="0" y1="18" x2="170" y2="18"></line>
+                <line id="diagramRelay3" class="relay-line" x1="0" y1="36" x2="170" y2="36"></line>
+                <line id="diagramRelay4" class="relay-line" x1="0" y1="54" x2="170" y2="54"></line>
+                <text x="182" y="4" id="diagramRelay1Value">R1 OFF</text>
+                <text x="182" y="22" id="diagramRelay2Value">R2 OFF</text>
+                <text x="182" y="40" id="diagramRelay3Value">R3 OFF</text>
+                <text x="182" y="58" id="diagramRelay4Value">R4 OFF</text>
+              </g>
+            </svg>
+          </div>
+
+          <div class="overview-state-strip" aria-label="System overview state legend">
+            <span><i class="state-swatch on"></i>Active</span>
+            <span><i class="state-swatch off"></i>Off</span>
+            <span><i class="state-swatch warn"></i>Warning</span>
+            <span><i class="state-swatch fault"></i>Fault</span>
+            <span><i class="state-swatch dropout"></i>Dropout</span>
+          </div>
         </div>
       </section>
 
@@ -140,6 +287,26 @@
               <button type="button" data-command="openOutletValve">Open outlet valve</button>
               <button type="button" data-command="closeOutletValve">Close outlet valve</button>
               <button type="button" data-command="flushChamber" data-confirm="Flush the measurement chamber now?">Flush chamber</button>
+            </div>
+          </section>
+
+          <section class="command-group" aria-labelledby="relay-commands">
+            <h3 id="relay-commands">Relay Lines</h3>
+            <div class="toggle-grid">
+              <button type="button" class="toggle-command" data-toggle="relay1" data-command-on="relay1On" data-command-off="relay1Off" aria-pressed="false"><span>PDB relay 1</span><small>OFF</small></button>
+              <button type="button" class="toggle-command" data-toggle="relay2" data-command-on="relay2On" data-command-off="relay2Off" aria-pressed="false"><span>PDB relay 2</span><small>OFF</small></button>
+              <button type="button" class="toggle-command" data-toggle="relay3" data-command-on="relay3On" data-command-off="relay3Off" aria-pressed="false"><span>PDB relay 3</span><small>OFF</small></button>
+              <button type="button" class="toggle-command" data-toggle="relay4" data-command-on="relay4On" data-command-off="relay4Off" aria-pressed="false"><span>PDB relay 4</span><small>OFF</small></button>
+            </div>
+          </section>
+
+          <section class="command-group" aria-labelledby="peripheral-commands">
+            <h3 id="peripheral-commands">Peripheral Overrides</h3>
+            <div class="toggle-grid">
+              <button type="button" class="toggle-command" data-toggle="pump1" data-command-on="pump1On" data-command-off="pump1Off" data-confirm-on="Turn vacuum pump 1 on manually?" aria-pressed="false"><span>Vacuum pump 1</span><small>OFF</small></button>
+              <button type="button" class="toggle-command" data-toggle="pump2" data-command-on="pump2On" data-command-off="pump2Off" data-confirm-on="Turn vacuum pump 2 on manually?" aria-pressed="false"><span>Vacuum pump 2</span><small>OFF</small></button>
+              <button type="button" class="toggle-command" data-toggle="compressor" data-command-on="compressorOn" data-command-off="compressorOff" data-confirm-on="Turn compressor on manually?" aria-pressed="false"><span>Compressor</span><small>OFF</small></button>
+              <button type="button" class="toggle-command" data-toggle="outletValve" data-command-on="outletValveOpen" data-command-off="outletValveClose" data-confirm-on="Open the normally closed outlet valve?" aria-pressed="false"><span>Outlet valve</span><small>CLOSED</small></button>
             </div>
           </section>
 

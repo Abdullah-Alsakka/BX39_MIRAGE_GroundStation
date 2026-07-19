@@ -119,6 +119,42 @@ h3 {
   gap: 7px;
 }
 
+.telemetry-header-tools {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.view-switch {
+  display: inline-grid;
+  grid-template-columns: repeat(2, minmax(82px, 1fr));
+  min-height: 28px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #171a17;
+}
+
+.view-switch button {
+  min-width: 0;
+  border: 0;
+  padding: 5px 10px;
+  color: var(--muted);
+  background: transparent;
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.view-switch button.active,
+.view-switch button:hover,
+.view-switch button:focus-visible {
+  color: #eafffb;
+  background: #173532;
+  outline: none;
+}
+
 .chip,
 .command-status,
 .terminal-route,
@@ -262,6 +298,18 @@ h3 {
 
 .log-entry.command {
   border-left: 3px solid var(--accent-2);
+}
+
+.telemetry-view {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.telemetry-view[hidden],
+.system-overview-view[hidden] {
+  display: none;
 }
 
 .quick-metrics {
@@ -413,7 +461,14 @@ canvas {
   gap: 8px;
 }
 
-.command-grid button {
+.toggle-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.command-grid button,
+.toggle-command {
   min-height: 44px;
   border: 1px solid #4c5549;
   border-radius: 6px;
@@ -428,16 +483,55 @@ canvas {
 }
 
 .command-grid button:hover,
-.command-grid button:focus-visible {
+.command-grid button:focus-visible,
+.toggle-command:hover,
+.toggle-command:focus-visible {
   border-color: var(--accent);
   outline: none;
   background: #2a332e;
 }
 
-.command-grid button:disabled {
+.command-grid button:disabled,
+.toggle-command:disabled {
   color: var(--faint);
   cursor: wait;
   opacity: 0.72;
+}
+
+.toggle-command {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.toggle-command span,
+.toggle-command small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.toggle-command small {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 3px 7px;
+  color: var(--faint);
+  background: #171a17;
+  font-size: 0.68rem;
+  font-weight: 900;
+}
+
+.toggle-command.is-active {
+  border-color: rgba(97, 211, 148, 0.64);
+  background: #1c3026;
+}
+
+.toggle-command.is-active small {
+  border-color: rgba(97, 211, 148, 0.58);
+  color: var(--ok);
+  background: var(--ok-bg);
 }
 
 .warning-command {
@@ -537,6 +631,190 @@ canvas {
   outline: none;
 }
 
+.system-overview-view {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px 12px;
+}
+
+.system-diagram-shell {
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+  border: 1px solid var(--line-soft);
+  border-radius: 6px;
+  background: #111511;
+}
+
+.system-diagram {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 360px;
+}
+
+.system-diagram marker path {
+  fill: #566152;
+}
+
+.flow-line,
+.control-line {
+  fill: none;
+  stroke: #566152;
+  stroke-width: 5;
+  stroke-linecap: round;
+  marker-end: url(#arrow);
+}
+
+.control-line {
+  stroke-width: 3;
+  stroke-dasharray: 7 7;
+  opacity: 0.8;
+}
+
+.flow-line.is-on,
+.control-line.is-on {
+  stroke: var(--ok);
+}
+
+.flow-line.is-warn,
+.control-line.is-warn {
+  stroke: var(--warn);
+}
+
+.flow-line.is-fault,
+.control-line.is-fault {
+  stroke: var(--fault);
+}
+
+.flow-line.is-dropout,
+.control-line.is-dropout {
+  stroke: var(--dropout);
+}
+
+.diagram-node rect {
+  rx: 7px;
+  fill: #171a17;
+  stroke: #4a5445;
+  stroke-width: 2;
+}
+
+.diagram-node text {
+  fill: var(--muted);
+  font-size: 14px;
+  font-weight: 800;
+  text-anchor: middle;
+}
+
+.diagram-node text:nth-of-type(2),
+.diagram-node text:nth-of-type(3) {
+  fill: var(--faint);
+  font-family: Consolas, "Cascadia Mono", monospace;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.diagram-node.is-on rect {
+  fill: rgba(97, 211, 148, 0.14);
+  stroke: rgba(97, 211, 148, 0.84);
+}
+
+.diagram-node.is-on text {
+  fill: #d8ffe6;
+}
+
+.diagram-node.is-warn rect {
+  fill: var(--warn-bg);
+  stroke: rgba(240, 193, 91, 0.86);
+}
+
+.diagram-node.is-warn text {
+  fill: #ffe8b1;
+}
+
+.diagram-node.is-fault rect {
+  fill: var(--fault-bg);
+  stroke: rgba(255, 107, 104, 0.9);
+}
+
+.diagram-node.is-fault text {
+  fill: #ffd0cf;
+}
+
+.diagram-node.is-dropout rect {
+  fill: var(--dropout-bg);
+  stroke: rgba(181, 137, 255, 0.9);
+}
+
+.diagram-node.is-dropout text {
+  fill: #e4d6ff;
+}
+
+.diagram-node.passive rect {
+  fill: #151815;
+  stroke: #3c4538;
+}
+
+.relay-bank text {
+  fill: var(--muted);
+  font-family: Consolas, "Cascadia Mono", monospace;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.relay-bank-title {
+  fill: var(--text) !important;
+  font-family: "Segoe UI", system-ui, sans-serif !important;
+  font-size: 13px !important;
+  text-transform: uppercase;
+}
+
+.relay-line {
+  stroke: #566152;
+  stroke-width: 6;
+  stroke-linecap: round;
+}
+
+.relay-line.is-on {
+  stroke: var(--ok);
+}
+
+.overview-state-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.overview-state-strip span {
+  display: inline-flex;
+  min-height: 28px;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--line-soft);
+  border-radius: 999px;
+  padding: 5px 9px;
+  color: var(--muted);
+  background: #171a17;
+  font-size: 0.74rem;
+  font-weight: 800;
+}
+
+.state-swatch {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #566152;
+}
+
+.state-swatch.on { background: var(--ok); }
+.state-swatch.off { background: #566152; }
+.state-swatch.warn { background: var(--warn); }
+.state-swatch.fault { background: var(--fault); }
+.state-swatch.dropout { background: var(--dropout); }
+
 @media (max-width: 1180px) {
   .console-grid {
     grid-template-columns: minmax(330px, 1fr) minmax(420px, 1.15fr);
@@ -549,6 +827,10 @@ canvas {
 
   .command-groups {
     grid-template-columns: 1fr;
+  }
+
+  .system-diagram {
+    min-height: 320px;
   }
 }
 
@@ -570,15 +852,21 @@ canvas {
   }
 
   .mission-chips,
-  .telemetry-counters {
+  .telemetry-counters,
+  .telemetry-header-tools {
     justify-content: flex-start;
   }
 
   .status-strip,
   .quick-metrics,
   .chart-grid,
-  .command-grid {
+  .command-grid,
+  .toggle-grid {
     grid-template-columns: 1fr;
+  }
+
+  .view-switch {
+    width: 100%;
   }
 
   .terminal-form {
