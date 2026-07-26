@@ -305,6 +305,9 @@ h3 {
   min-height: 0;
   flex: 1;
   flex-direction: column;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 
 .telemetry-view[hidden],
