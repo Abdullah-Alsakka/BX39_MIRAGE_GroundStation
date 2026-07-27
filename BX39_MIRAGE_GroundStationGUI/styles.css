@@ -50,10 +50,47 @@ input {
 .console-grid {
   display: grid;
   grid-template-columns: minmax(390px, 0.95fr) minmax(520px, 1.35fr);
-  grid-template-rows: minmax(390px, 1fr) minmax(350px, 0.92fr);
   gap: 12px;
   height: 100vh;
   padding: 12px;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+/* Column Wrapper: Isolates vertical sizing between left and right sides */
+.console-column {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Top Panels (Logs & Telemetry): Expand to fill remaining height */
+.logs-panel,
+.telemetry-panel {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* Bottom Resizable Panels (Commands & Terminal) */
+.command-panel,
+.terminal-panel {
+  flex: none;             /* Fixed height allows JS mouse drag */
+  width: 100%;            /* Edge-to-edge alignment with top panels */
+  align-self: stretch;    /* Prevents horizontal alignment offset */
+  background: var(--panel);
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  height: 320px;          /* Initial height */
+  min-height: 140px;      /* Prevents collapsing smaller than header */
+  max-height: 700px;
+  box-sizing: border-box;
 }
 
 .panel {
@@ -76,6 +113,11 @@ input {
   padding: 14px 16px 12px;
   border-bottom: 1px solid var(--line-soft);
   background: var(--panel-2);
+}
+
+.command-panel .panel-header,
+.terminal-panel .panel-header {
+  flex-shrink: 0;
 }
 
 .mission-header {
@@ -368,17 +410,18 @@ h3 {
 .chart-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  grid-auto-rows: minmax(146px, 1fr);
+  grid-auto-rows: minmax(280px, 1fr); /* Generates uniform, scaled chart rows */
   gap: 8px;
-  min-height: 0;
+  min-height: 0;                     
   flex: 1;
   padding: 10px 12px 12px;
 }
 
 .chart-card {
   display: flex;
-  min-height: 0;
   flex-direction: column;
+  position: relative;               /* Prevents canvas position overflow */
+  min-height: 280px;                
   overflow: hidden;
   border: 1px solid var(--line-soft);
   border-radius: 6px;
@@ -391,6 +434,13 @@ h3 {
   justify-content: space-between;
   gap: 8px;
   padding: 8px 10px 4px;
+}
+
+.chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  align-items: center;
 }
 
 .chart-head span {
@@ -413,25 +463,29 @@ h3 {
 .methane { background: #61d394; }
 .co2 { background: #7aa6ff; }
 .water { background: #f0c15b; }
-.chamber-pressure { background: #5cc8c0; }
 .ambient-pressure { background: #b589ff; }
 .chamber-temp { background: #ff9f57; }
-.electronics-temp { background: #ff6b68; }
+.SD-temp { background: #ffeb68; }
 .humidity { background: #7fd4ff; }
+.interstage-1 { background: #408b86; }
+.interstage-2 { background: #5cc8c0; }
+.chamber-pressure { background: #73fff6; }
 .link { background: #61d394; }
 .pump { background: #f0c15b; }
 .thermal { background: #ff9f57; }
+.pump1-temp { background: #642928; }
+.pump2-temp { background: #ba4e4c; }
+.pump3-temp { background: #ff6b68; }
+.interstage1-temp { background: #408b86; }
+.interstage2-temp { background: #5cc8c0; }
+.chamber-tempMS { background: #73adff; }
+.chamber-tempK96 { background: #5682c0; }
 
 canvas {
   display: block;
   width: 100%;
   height: 100%;
   min-height: 112px;
-}
-
-.command-panel,
-.terminal-panel {
-  background: var(--panel);
 }
 
 .command-groups {
@@ -553,6 +607,35 @@ canvas {
   border-color: rgba(255, 107, 104, 0.28);
 }
 
+/* Shared Top Resize Handle Styling */
+.panel-resize-handle {
+  height: 10px;
+  width: 100%;
+  cursor: ns-resize;
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Visual grip indicator bar on top edge */
+.panel-resize-handle::after {
+  content: "";
+  width: 36px;
+  height: 3px;
+  background-color: rgba(255, 255, 255, 0.25);
+  border-radius: 2px;
+  transition: background-color 0.15s ease;
+}
+
+.panel-resize-handle:hover::after,
+.panel.is-resizing .panel-resize-handle::after {
+  background-color: rgba(255, 255, 255, 0.7);
+}
+
 .terminal-output {
   flex: 1;
   min-height: 0;
@@ -594,6 +677,7 @@ canvas {
   align-items: center;
   padding: 10px 12px;
   background: #161915;
+  flex-shrink: 0;
 }
 
 .terminal-form label {

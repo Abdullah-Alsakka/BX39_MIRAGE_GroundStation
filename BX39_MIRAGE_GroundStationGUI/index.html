@@ -9,6 +9,7 @@
   </head>
   <body>
     <main class="console-grid" aria-label="MIRAGE mission control console">
+      <div class="console-column">
       <section class="panel logs-panel" aria-labelledby="logs-title">
         <header class="panel-header mission-header">
           <div>
@@ -40,6 +41,80 @@
         <ol id="logFeed" class="log-feed" aria-label="Timestamped operations log"></ol>
       </section>
 
+      <section class="panel command-panel" aria-labelledby="commands-title">
+        <div class="panel-resize-handle" id="commandResizeHandle" aria-label="Resize command pane"></div>
+        <header class="panel-header">
+          <div>
+            <p class="eyebrow">Mock uplink</p>
+            <h2 id="commands-title">Mission Commands</h2>
+          </div>
+          <span id="commandStatus" class="command-status">Ready</span>
+        </header>
+
+        <div class="command-groups">
+          <section class="command-group" aria-labelledby="mode-commands">
+            <h3 id="mode-commands">Mission Mode</h3>
+            <div class="command-grid">
+              <button type="button" data-command="startExperiment">Start experiment</button>
+              <button type="button" data-command="enterStandby">Enter standby</button>
+              <button type="button" data-command="requestStatus">Request status update</button>
+              <button type="button" data-command="pingExperiment">Ping experiment</button>
+            </div>
+          </section>
+
+          <section class="command-group" aria-labelledby="pressure-commands">
+            <h3 id="pressure-commands">Pressure / Flow</h3>
+            <div class="command-grid">
+              <button type="button" data-command="startPressurisation">Start pressurisation</button>
+              <button type="button" data-command="stopPressurisation">Stop pressurisation</button>
+              <button type="button" data-command="openOutletValve">Open outlet valve</button>
+              <button type="button" data-command="closeOutletValve">Close outlet valve</button>
+              <button type="button" data-command="flushChamber" data-confirm="Flush the measurement chamber now?">Flush chamber</button>
+            </div>
+          </section>
+
+          <section class="command-group" aria-labelledby="relay-commands">
+            <h3 id="relay-commands">Relay Lines</h3>
+            <div class="toggle-grid">
+              <button type="button" class="toggle-command" data-toggle="relay1" data-command-on="relay1On" data-command-off="relay1Off" aria-pressed="false"><span>PDB relay 1</span><small>OFF</small></button>
+              <button type="button" class="toggle-command" data-toggle="relay2" data-command-on="relay2On" data-command-off="relay2Off" aria-pressed="false"><span>PDB relay 2</span><small>OFF</small></button>
+              <button type="button" class="toggle-command" data-toggle="relay3" data-command-on="relay3On" data-command-off="relay3Off" aria-pressed="false"><span>PDB relay 3</span><small>OFF</small></button>
+              <button type="button" class="toggle-command" data-toggle="relay4" data-command-on="relay4On" data-command-off="relay4Off" aria-pressed="false"><span>PDB relay 4</span><small>OFF</small></button>
+            </div>
+          </section>
+
+          <section class="command-group" aria-labelledby="peripheral-commands">
+            <h3 id="peripheral-commands">Peripheral Overrides</h3>
+            <div class="toggle-grid">
+              <button type="button" class="toggle-command" data-toggle="pump1" data-command-on="pump1On" data-command-off="pump1Off" data-confirm-on="Turn vacuum pump 1 on manually?" aria-pressed="false"><span>Vacuum pump 1</span><small>OFF</small></button>
+              <button type="button" class="toggle-command" data-toggle="pump2" data-command-on="pump2On" data-command-off="pump2Off" data-confirm-on="Turn vacuum pump 2 on manually?" aria-pressed="false"><span>Vacuum pump 2</span><small>OFF</small></button>
+              <button type="button" class="toggle-command" data-toggle="compressor" data-command-on="compressorOn" data-command-off="compressorOff" data-confirm-on="Turn compressor on manually?" aria-pressed="false"><span>Compressor</span><small>OFF</small></button>
+              <button type="button" class="toggle-command" data-toggle="outletValve" data-command-on="outletValveOpen" data-command-off="outletValveClose" data-confirm-on="Open the normally closed outlet valve?" aria-pressed="false"><span>Outlet valve</span><small>CLOSED</small></button>
+            </div>
+          </section>
+
+          <section class="command-group" aria-labelledby="thermal-commands">
+            <h3 id="thermal-commands">Thermal Control</h3>
+            <div class="command-grid">
+              <button type="button" data-command="enableHeating">Enable heating</button>
+              <button type="button" data-command="disableHeating">Disable heating</button>
+              <button type="button" data-command="enableCooling">Enable cooling</button>
+              <button type="button" data-command="disableCooling">Disable cooling</button>
+            </div>
+          </section>
+
+          <section class="command-group recovery-group" aria-labelledby="recovery-commands">
+            <h3 id="recovery-commands">Recovery</h3>
+            <div class="command-grid">
+              <button type="button" class="warning-command" data-command="restartController" data-confirm="Restart the main controller? Telemetry may pause during reboot.">Restart main controller</button>
+              <button type="button" class="danger-command" data-command="emergencyStop" data-confirm="Send emergency stop and safe shutdown?">Emergency stop / safe shutdown</button>
+            </div>
+          </section>
+        </div>
+      </section>
+      </div>
+
+      <div class="console-column">
       <section class="panel telemetry-panel" aria-labelledby="telemetry-title">
         <header class="panel-header">
           <div>
@@ -97,17 +172,49 @@
             </article>
             <article class="chart-card">
               <div class="chart-head">
-                <h3>Pressure</h3>
-                <span><i class="legend-dot chamber-pressure"></i>Chamber <i class="legend-dot ambient-pressure"></i>Ambient</span>
+                <h3>Internal Pressures</h3>
+                <span><i class="legend-dot interstage-1"></i>IS 1 <i class="legend-dot interstage-2"></i>IS 2<i class="legend-dot chamber-pressure"></i>Chamber</span>
               </div>
               <canvas id="pressureChart" aria-label="Pressure trend"></canvas>
             </article>
             <article class="chart-card">
               <div class="chart-head">
-                <h3>Thermal / Humidity</h3>
-                <span><i class="legend-dot chamber-temp"></i>Chamber <i class="legend-dot electronics-temp"></i>Electronics <i class="legend-dot humidity"></i>RH</span>
+                <h3>Internal Temperatures</h3>
+                <div class="chart-legend">
+                  <span class="legend-item" title="SD card Temperature">
+                    <i class="legend-dot SD-temp"></i>SD
+                  </span>
+                  <span class="legend-item" title="Vacuum Pump 1 Temperature">
+                    <i class="legend-dot pump1-temp"></i>VP1
+                  </span>
+                  <span class="legend-item" title="Vacuum Pump 2 Temperature">
+                    <i class="legend-dot pump2-temp"></i>VP2
+                  </span>
+                  <span class="legend-item" title="Piston Pump Temperature">
+                    <i class="legend-dot pump3-temp"></i>PP
+                  </span>
+                  <span class="legend-item" title="Interstage 1 Temperature">
+                    <i class="legend-dot interstage1-temp"></i>IS 1
+                  </span>
+                  <span class="legend-item" title="Interstage 2 Temperature">
+                    <i class="legend-dot interstage2-temp"></i>IS 2
+                  </span>
+                  <span class="legend-item" title="Chamber MS5803 Temperature">
+                    <i class="legend-dot chamber-tempMS"></i>Chamber MS
+                  </span>
+                  <span class="legend-item" title="Chamber K96 Temperature">
+                    <i class="legend-dot chamber-tempK96"></i>Chamber K96
+                  </span>
               </div>
-              <canvas id="thermalChart" aria-label="Thermal and humidity trend"></canvas>
+              </div>
+              <canvas id="thermalChart" aria-label="Temperature trend"></canvas>
+            </article>
+            <article class="chart-card">
+              <div class="chart-head">
+                <h3>Ambient</h3>
+                <span> <i class="legend-dot ambient-pressure"></i>Pressure <i class="legend-dot humidity"></i>RH</span>
+              </div>
+              <canvas id="ambientChart" aria-label="Thermal and humidity trend"></canvas>
             </article>
             <article class="chart-card">
               <div class="chart-head">
@@ -259,78 +366,8 @@
         </div>
       </section>
 
-      <section class="panel command-panel" aria-labelledby="commands-title">
-        <header class="panel-header">
-          <div>
-            <p class="eyebrow">Mock uplink</p>
-            <h2 id="commands-title">Mission Commands</h2>
-          </div>
-          <span id="commandStatus" class="command-status">Ready</span>
-        </header>
-
-        <div class="command-groups">
-          <section class="command-group" aria-labelledby="mode-commands">
-            <h3 id="mode-commands">Mission Mode</h3>
-            <div class="command-grid">
-              <button type="button" data-command="startExperiment">Start experiment</button>
-              <button type="button" data-command="enterStandby">Enter standby</button>
-              <button type="button" data-command="requestStatus">Request status update</button>
-              <button type="button" data-command="pingExperiment">Ping experiment</button>
-            </div>
-          </section>
-
-          <section class="command-group" aria-labelledby="pressure-commands">
-            <h3 id="pressure-commands">Pressure / Flow</h3>
-            <div class="command-grid">
-              <button type="button" data-command="startPressurisation">Start pressurisation</button>
-              <button type="button" data-command="stopPressurisation">Stop pressurisation</button>
-              <button type="button" data-command="openOutletValve">Open outlet valve</button>
-              <button type="button" data-command="closeOutletValve">Close outlet valve</button>
-              <button type="button" data-command="flushChamber" data-confirm="Flush the measurement chamber now?">Flush chamber</button>
-            </div>
-          </section>
-
-          <section class="command-group" aria-labelledby="relay-commands">
-            <h3 id="relay-commands">Relay Lines</h3>
-            <div class="toggle-grid">
-              <button type="button" class="toggle-command" data-toggle="relay1" data-command-on="relay1On" data-command-off="relay1Off" aria-pressed="false"><span>PDB relay 1</span><small>OFF</small></button>
-              <button type="button" class="toggle-command" data-toggle="relay2" data-command-on="relay2On" data-command-off="relay2Off" aria-pressed="false"><span>PDB relay 2</span><small>OFF</small></button>
-              <button type="button" class="toggle-command" data-toggle="relay3" data-command-on="relay3On" data-command-off="relay3Off" aria-pressed="false"><span>PDB relay 3</span><small>OFF</small></button>
-              <button type="button" class="toggle-command" data-toggle="relay4" data-command-on="relay4On" data-command-off="relay4Off" aria-pressed="false"><span>PDB relay 4</span><small>OFF</small></button>
-            </div>
-          </section>
-
-          <section class="command-group" aria-labelledby="peripheral-commands">
-            <h3 id="peripheral-commands">Peripheral Overrides</h3>
-            <div class="toggle-grid">
-              <button type="button" class="toggle-command" data-toggle="pump1" data-command-on="pump1On" data-command-off="pump1Off" data-confirm-on="Turn vacuum pump 1 on manually?" aria-pressed="false"><span>Vacuum pump 1</span><small>OFF</small></button>
-              <button type="button" class="toggle-command" data-toggle="pump2" data-command-on="pump2On" data-command-off="pump2Off" data-confirm-on="Turn vacuum pump 2 on manually?" aria-pressed="false"><span>Vacuum pump 2</span><small>OFF</small></button>
-              <button type="button" class="toggle-command" data-toggle="compressor" data-command-on="compressorOn" data-command-off="compressorOff" data-confirm-on="Turn compressor on manually?" aria-pressed="false"><span>Compressor</span><small>OFF</small></button>
-              <button type="button" class="toggle-command" data-toggle="outletValve" data-command-on="outletValveOpen" data-command-off="outletValveClose" data-confirm-on="Open the normally closed outlet valve?" aria-pressed="false"><span>Outlet valve</span><small>CLOSED</small></button>
-            </div>
-          </section>
-
-          <section class="command-group" aria-labelledby="thermal-commands">
-            <h3 id="thermal-commands">Thermal Control</h3>
-            <div class="command-grid">
-              <button type="button" data-command="enableHeating">Enable heating</button>
-              <button type="button" data-command="disableHeating">Disable heating</button>
-              <button type="button" data-command="enableCooling">Enable cooling</button>
-              <button type="button" data-command="disableCooling">Disable cooling</button>
-            </div>
-          </section>
-
-          <section class="command-group recovery-group" aria-labelledby="recovery-commands">
-            <h3 id="recovery-commands">Recovery</h3>
-            <div class="command-grid">
-              <button type="button" class="warning-command" data-command="restartController" data-confirm="Restart the main controller? Telemetry may pause during reboot.">Restart main controller</button>
-              <button type="button" class="danger-command" data-command="emergencyStop" data-confirm="Send emergency stop and safe shutdown?">Emergency stop / safe shutdown</button>
-            </div>
-          </section>
-        </div>
-      </section>
-
       <section class="panel terminal-panel" aria-labelledby="terminal-title">
+        <div class="panel-resize-handle" id="terminalResizeHandle" aria-label="Resize terminal pane"></div>
         <header class="panel-header">
           <div>
             <p class="eyebrow">Manual intervention</p>
@@ -346,6 +383,7 @@
           <button type="submit">Send</button>
         </form>
       </section>
+      </div>
     </main>
   </body>
 </html>
