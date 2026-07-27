@@ -162,11 +162,25 @@ def parse_status_packet(data: bytes, seq: int = 0, timestamp_ms: int | None = No
         "co2Ppm": finite_number(k96_co2),
         "waterPpm": finite_number(k96_h2o),
         "chamberPressureBar": finite_number(pp2),
-        "chamberTempC": finite_number(tp5 if tp5 else k96_temperature, 21.0),
+        "chamberTempC_MS": finite_number(tp5),
+        "chamberTempC_K96": finite_number(k96_temperature,0.0),
         "electronicsTempC": finite_number(tt2, 25.0),
-        "humidityRh": finite_number(k96_humidity if k96_humidity else ha1, 38.0),
-        "ambientPressureHpa": pressure_to_hpa(pa1),
-        "ambientTempC": finite_number(ta1 if ta1 else ta3, 0.0),
+        "humidityRh_ambient": finite_number(ha1),
+        "humidityRh_k96": finite_number(k96_humidity),
+        "ambientPressureBar": finite_number(pa1),
+        "Interstage_1Bar": finite_number(pp3)+finite_number(pa1),
+        "Interstage_2Bar": finite_number(pp1)+finite_number(pa1),
+        "pump1C": finite_number(tp1),
+        "pump2C": finite_number(tp2),
+        "compressorC": finite_number(tp3),
+        "Interstage1_C": finite_number(tp6),
+        "Interstage2_C": finite_number(tp4),
+        "outletC": finite_number(tt1),
+        "sdCardC": finite_number(tt2),
+        "inletC": finite_number(tt3),
+        "ambientTempC_TMP": finite_number(ta1),
+        "ambientTempC_MS": finite_number(ta3),
+        "ambientTempC_SHT": finite_number(ta2),
         "pumpDutyPct": 100 if pressure_system_on else 0,
         "pump1DutyPct": 100 if pressure_system_on else 0,
         "pump2DutyPct": 100 if pressure_system_on else 0,
@@ -198,19 +212,7 @@ def parse_status_packet(data: bytes, seq: int = 0, timestamp_ms: int | None = No
         "connectionLost": bool(connection_lost),
         "statusOk": bool(status_ok),
         "payloadClock": f"{hours:02}:{minutes:02}:{seconds:02}",
-        "rawTemperatures": {
-            "pump1C": finite_number(tp1),
-            "pump2C": finite_number(tp2),
-            "compressorC": finite_number(tp3),
-            "pipePumpPumpC": finite_number(tp6),
-            "pipePumpCompressorC": finite_number(tp4),
-            "outletC": finite_number(tt1),
-            "sdCardC": finite_number(tt2),
-            "inletC": finite_number(tt3),
-        },
         "rawPressures": {
-            "pumpPumpBar": finite_number(pp3),
-            "pumpCompressorBar": finite_number(pp1),
             "k96Hpa": finite_number(k96_pressure),
         },
         "k96Error": int(k96_error),
@@ -356,6 +358,13 @@ def make_http_handler(static_root: Path, state: GroundStationState):
 
         def __init__(self, *args, **kwargs):
             super().__init__(*args, directory=str(static_root), **kwargs)
+
+        def end_headers(self) -> None:
+            # Prevent browser caching for all served static assets
+            self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
+            self.send_header("Pragma", "no-cache")
+            self.send_header("Expires", "0")
+            super().end_headers()
 
         def do_GET(self) -> None:
             if self.path == "/api/status":

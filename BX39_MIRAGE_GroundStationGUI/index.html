@@ -212,7 +212,13 @@
             <article class="chart-card">
               <div class="chart-head">
                 <h3>Ambient</h3>
-                <span> <i class="legend-dot ambient-pressure"></i>Pressure <i class="legend-dot humidity"></i>RH</span>
+                 <div class="chart-legend">
+                  <span class="legend-item" title= "MS5803 Pressure"><i class="legend-dot ambient-pressure"></i>Pressure</span>
+                  <span class="legend-item" title= "SHT45 Humidity"><i class="legend-dot ambient-humidity"></i>RH</span>
+                  <span class="legend-item" title= "SHT45 Temperature"><i class="legend-dot temperature-sht45"></i>Temp 1</span>
+                  <span class="legend-item" title= "TMP117 Temperature"><i class="legend-dot temperature-tmp117"></i>Temp 2</span>
+                  <span class="legend-item" title= "MS5803 Temperature"><i class="legend-dot temperature-ms5803"></i>Temp 3</span>
+                 </div>
               </div>
               <canvas id="ambientChart" aria-label="Thermal and humidity trend"></canvas>
             </article>
