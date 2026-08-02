@@ -28,7 +28,18 @@ from pathlib import Path
 from typing import Any
 
 
-SENSOR_STRUCT_FORMAT = "<BBB" + "f" * 23 + "H" + "9B"
+SENSOR_STRUCT_FORMAT = (
+    "<3B"        # seconds, minutes, hours
+    "17f"       # Tp1 through Tt3
+    "ididid"    # K96 signals & filtered doubles (int32, double, int32, double, int32, double)
+    "8f"        # K96 temperatures & humidity floats
+    "HHffH"     # MPL block: uflt_ir, flt_ir, uflt_conc, flt_conc, uflt_error
+    "HHfHH"     # LPL block: uflt_ir, flt_ir, uflt_conc, uflt_error, flt_error
+    "HHfHH"     # SPL block: uflt_ir, flt_ir, uflt_conc, uflt_error, flt_error
+    "H"         # K96_error (uint16_t)
+    "5BH3B"     # Packet flags & thermal status (operating_mode, command_received, connection_lost, status_ok, pressure_system_on, heater_mask(H), thermal_online, thermal_state, thermal_error)
+)
+
 STATUS_PACKET_SIZE = struct.calcsize(SENSOR_STRUCT_FORMAT)
 
 MODE_NAMES = {
@@ -46,7 +57,7 @@ def recv_exact(sock, size: int) -> bytes:
     while remaining > 0:
         chunk = sock.recv(remaining)
         if not chunk:
-            return b""
+            raise ConnectionError("MCU closed TCP connection")
         chunks.append(chunk)
         remaining -= len(chunk)
 
@@ -128,12 +139,35 @@ def parse_status_packet(data: bytes, seq: int = 0, timestamp_ms: int | None = No
         tt1,
         tt2,
         tt3,
-        k96_co2,
-        k96_ch4,
-        k96_h2o,
-        k96_pressure,
-        k96_temperature,
-        k96_humidity,
+        k96_lpl_signal,
+        k96_lpl_signal_filtered,
+        k96_spl_signal,
+        k96_spl_signal_filtered,
+        k96_mpl_signal,
+        k96_mpl_signal_filtered,
+        k96_aducdie_temp,
+        k96_aducdie_temp_filtered,
+        k96_ntc0_temp,
+        k96_ntc0_temp_filtered,
+        k96_ntc1_temp,
+        k96_ntc1_temp_filtered,
+        k96_rh,
+        k96_rh_temp,
+        k96_mpl_uflt_ir_signal,
+        k96_mpl_flt_ir_signal,
+        k96_mpl_uflt_conc,
+        k96_mpl_flt_conc,
+        k96_mpl_uflt_error,
+        k96_lpl_uflt_ir_signal,
+        k96_lpl_flt_ir_signal,
+        k96_lpl_uflt_conc,
+        k96_lpl_uflt_error,
+        k96_lpl_flt_error,
+        k96_spl_uflt_ir_signal,
+        k96_spl_flt_ir_signal,
+        k96_spl_uflt_conc,
+        k96_spl_uflt_error,
+        k96_spl_flt_error,
         k96_error,
         operating_mode,
         command_received,
@@ -158,18 +192,18 @@ def parse_status_packet(data: bytes, seq: int = 0, timestamp_ms: int | None = No
         "linkStatus": link_status,
         "linkQuality": link_quality,
         "latencyMs": 0,
-        "methanePpm": finite_number(k96_ch4),
-        "co2Ppm": finite_number(k96_co2),
-        "waterPpm": finite_number(k96_h2o),
+        "methanePpm": finite_number(k96_lpl_uflt_conc),
+        "co2Ppm": finite_number(k96_spl_uflt_conc),
+        "waterPpm": finite_number(k96_mpl_uflt_conc),
         "chamberPressureBar": finite_number(pp2),
         "chamberTempC_MS": finite_number(tp5),
-        "chamberTempC_K96": finite_number(k96_temperature,0.0),
+        "chamberTempC_K96": finite_number(k96_rh_temp, 0.0),
         "electronicsTempC": finite_number(tt2, 25.0),
         "humidityRh_ambient": finite_number(ha1),
-        "humidityRh_k96": finite_number(k96_humidity),
+        "humidityRh_k96": finite_number(k96_rh),
         "ambientPressureBar": finite_number(pa1),
-        "Interstage_1Bar": finite_number(pp3)+finite_number(pa1),
-        "Interstage_2Bar": finite_number(pp1)+finite_number(pa1),
+        "Interstage_1Bar": finite_number(pp3) + finite_number(pa1),
+        "Interstage_2Bar": finite_number(pp1) + finite_number(pa1),
         "pump1C": finite_number(tp1),
         "pump2C": finite_number(tp2),
         "compressorC": finite_number(tp3),
@@ -213,11 +247,12 @@ def parse_status_packet(data: bytes, seq: int = 0, timestamp_ms: int | None = No
         "statusOk": bool(status_ok),
         "payloadClock": f"{hours:02}:{minutes:02}:{seconds:02}",
         "rawPressures": {
-            "k96Hpa": finite_number(k96_pressure),
+            "k96Hpa": finite_number(k96_ntc0_temp),
         },
         "k96Error": int(k96_error),
     }
 
+    frame["missionMode"] = frame["mode"]
     frame["health"] = evaluate_health(frame)
     if frame["connectionLost"]:
         frame["dropoutReason"] = "payload reported connection_lost in status packet"
