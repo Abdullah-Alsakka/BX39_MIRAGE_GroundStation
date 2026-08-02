@@ -21,6 +21,7 @@ def make_status_packet(
     heater_mask=0x0D,
     thermal_online=1,
     thermal_error=0,
+    captured_errors=0,
 ):
     floats = [
         31.0,   # Tp1
@@ -40,12 +41,17 @@ def make_status_packet(
         18.0,   # Tt1
         27.0,   # Tt2
         19.0,   # Tt3
-        416.0,  # K96_CO2
+        416,    # K96_CO2
         1.86,   # K96_CH4
-        3100.0, # K96_H2O
+        3100,   # K96_H2O
         3000.0, # K96 pressure hPa
-        21.3,   # K96 temp
+        21,     # K96 temp
         39.0,   # K96 humidity
+        *([0.0] * 8),  # K96 temperature/humidity channels not used by this test
+        0, 0, 3100.0, 3100.0, 0,  # MPL
+        0, 0, 1.86, 0, 0,          # LPL
+        0, 0, 416.0, 0, 0,         # SPL
+        0,              # K96_error
     ]
     return struct.pack(
         gateway.SENSOR_STRUCT_FORMAT,
@@ -53,7 +59,6 @@ def make_status_packet(
         2,
         3,
         *floats,
-        0,
         mode,
         0,
         connection_lost,
@@ -63,10 +68,17 @@ def make_status_packet(
         thermal_online,
         2,
         thermal_error,
+        captured_errors,
     )
 
 
 class StatusPacketParserTest(unittest.TestCase):
+    def test_error_manifest_is_shared_and_contiguous(self):
+        self.assertEqual(len(gateway.ERROR_MESSAGES), 57)
+        self.assertEqual(gateway.ERROR_MESSAGES[0], "Ethernet SPI read transaction failed")
+        self.assertEqual(gateway.ERROR_MESSAGES[56], "Sensor data file open failed")
+        self.assertTrue(gateway.ERROR_MANIFEST_PATH.exists())
+
     def test_decodes_main_system_status_packet(self):
         frame = gateway.parse_status_packet(make_status_packet(), seq=42, timestamp_ms=123456)
 
@@ -83,6 +95,16 @@ class StatusPacketParserTest(unittest.TestCase):
         self.assertTrue(frame["peripherals"]["pump1"])
         self.assertEqual(frame["heaterMask"], 0x0D)
         self.assertTrue(frame["thermalOnline"])
+        self.assertEqual(frame["errors"], [])
+
+    def test_decodes_captured_error_bits(self):
+        frame = gateway.parse_status_packet(
+            make_status_packet(captured_errors=(1 << 0) | (1 << 55)),
+        )
+
+        self.assertEqual(frame["health"], "fault")
+        self.assertEqual([error["bit"] for error in frame["errors"]], [0, 55])
+        self.assertIn("Ethernet SPI read", frame["errors"][0]["message"])
 
     def test_connection_lost_packet_becomes_dropout(self):
         frame = gateway.parse_status_packet(make_status_packet(connection_lost=1), seq=7)

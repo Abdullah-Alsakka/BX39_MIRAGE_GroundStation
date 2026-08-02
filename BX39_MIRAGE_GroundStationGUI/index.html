@@ -17,7 +17,13 @@
             <h1 id="logs-title">MIRAGE Mission Control</h1>
           </div>
           <div class="mission-chips" aria-label="Current MIRAGE state">
-            <span id="overallHealth" class="chip chip-ok">Healthy</span>
+            <span class="health-control">
+              <button id="overallHealth" class="chip chip-ok" type="button" aria-expanded="false" aria-controls="healthDetails">Healthy</button>
+              <span id="healthDetails" class="health-details" role="status" hidden>
+                <strong>Detected errors</strong>
+                <span class="health-empty">No captured errors</span>
+              </span>
+            </span>
             <span id="missionMode" class="chip">No telemetry</span>
             <span id="linkState" class="chip chip-ok">E-Link online</span>
           </div>
@@ -215,7 +221,8 @@
                 <h3>Ambient</h3>
                  <div class="chart-legend">
                   <span class="legend-item" title= "MS5803 Pressure"><i class="legend-dot ambient-pressure"></i>Pressure</span>
-                  <span class="legend-item" title= "SHT45 Humidity"><i class="legend-dot ambient-humidity"></i>RH</span>
+                  <span class="legend-item" title= "SHT45 Humidity"><i class="legend-dot ambient-humidity"></i>RH SHT45</span>
+                  <span class="legend-item" title= "K96 Humidity"><i class="legend-dot humidity-k96"></i>RH K96</span>
                   <span class="legend-item" title= "SHT45 Temperature"><i class="legend-dot temperature-sht45"></i>Temp 1</span>
                   <span class="legend-item" title= "TMP117 Temperature"><i class="legend-dot temperature-tmp117"></i>Temp 2</span>
                   <span class="legend-item" title= "MS5803 Temperature"><i class="legend-dot temperature-ms5803"></i>Temp 3</span>

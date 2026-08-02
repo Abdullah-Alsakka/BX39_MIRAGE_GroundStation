@@ -243,6 +243,51 @@ h3 {
   background: var(--dropout-bg);
 }
 
+.health-control {
+  position: relative;
+  display: inline-flex;
+}
+
+.health-control > button {
+  cursor: pointer;
+}
+
+.health-details {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 8px);
+  right: 0;
+  width: min(360px, 78vw);
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-2);
+  box-shadow: var(--shadow);
+  color: var(--text);
+  font-size: 0.78rem;
+  text-align: left;
+}
+
+.health-details strong {
+  display: block;
+  margin-bottom: 7px;
+}
+
+.health-details ul {
+  max-height: 260px;
+  margin: 0;
+  padding-left: 18px;
+  overflow-y: auto;
+}
+
+.health-details li + li {
+  margin-top: 5px;
+}
+
+.health-empty {
+  color: var(--muted);
+}
+
 .status-strip {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -467,6 +512,7 @@ h3 {
 .chamber-temp { background: #ff9f57; }
 .SD-temp { background: #ffeb68; }
 .ambient-humidity { background: #7fd4ff; }
+.humidity-k96 { background: #548eab; }
 .temperature-sht45 { background: #d4a260; }
 .temperature-tmp117 { background: #ffc273; }
 .temperature-ms5803 { background: #795c37; }

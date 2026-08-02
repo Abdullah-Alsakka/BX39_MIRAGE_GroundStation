@@ -378,6 +378,7 @@
 
   const dom = {
     overallHealth: document.getElementById("overallHealth"),
+    healthDetails: document.getElementById("healthDetails"),
     missionMode: document.getElementById("missionMode"),
     linkState: document.getElementById("linkState"),
     lastFrameAge: document.getElementById("lastFrameAge"),
@@ -1243,6 +1244,7 @@
     log.add("info", "Ground station initialized", MOCK_DATA_ENABLED ? "mock telemetry and mock uplink adapters active" : "mock telemetry disabled; awaiting payload connection");
 
     bindCommands();
+    bindHealthDetails();
     bindTerminal();
     bindViewSwitch();
     mockCommandRouter.on(handleCommandEvent);
@@ -1293,6 +1295,21 @@
             button.disabled = false;
           });
       });
+    });
+  }
+
+  function bindHealthDetails() {
+    dom.overallHealth.addEventListener("click", function () {
+      const expanded = dom.overallHealth.getAttribute("aria-expanded") === "true";
+      dom.overallHealth.setAttribute("aria-expanded", String(!expanded));
+      dom.healthDetails.hidden = expanded;
+    });
+
+    document.addEventListener("click", function (event) {
+      if (!event.target.closest(".health-control")) {
+        dom.overallHealth.setAttribute("aria-expanded", "false");
+        dom.healthDetails.hidden = true;
+      }
     });
   }
 
@@ -1428,6 +1445,7 @@
     const linkQuality = sample.valid ? sample.linkQuality : 0;
 
     setChip(dom.overallHealth, healthLabel(health), health);
+    renderHealthDetails(sample && sample.valid ? sample.errors : []);
     setChip(dom.missionMode, resolveMissionMode(display), "neutral");
     setChip(dom.linkState, linkLabel(linkStatus), linkStatus === "ONLINE" ? "healthy" : linkStatus === "DEGRADED" ? "warning" : "dropout");
 
@@ -1812,10 +1830,11 @@
       yLabel: "bar/C/%",
       series: [
         { key: "ambientPressureBar", color: getColorFromCssClass("ambient-pressure","background-color"), min: 0, max: 2 },
-        { key: "humidityRh_ambient", color: getColorFromCssClass("ambient-humidity","background-color"), min: 0, max: 100 },
         { key: "ambientTempC_TMP", color: getColorFromCssClass("temperature-tmp117","background-color"), min: -60, max: 80 },
         { key: "ambientTempC_SHT", color: getColorFromCssClass("temperature-sht45","background-color"), min: -60, max: 80 },
-        { key: "ambientTempC_MS", color: getColorFromCssClass("temperature-ms5803","background-color"), min: -60, max: 80 }
+        { key: "ambientTempC_MS", color: getColorFromCssClass("temperature-ms5803","background-color"), min: -60, max: 80 },
+        { key: "humidityRh_ambient", color: getColorFromCssClass("ambient-humidity","background-color"), min: 0, max: 100 },
+        { key: "humidityRh_k96", color: getColorFromCssClass("humidity-k96","background-color"), min: 0, max: 100 }
       ]
     });
 
@@ -2274,6 +2293,23 @@ function drawTooltip(ctx, hoverPos, samples, pad, plotW, plotH, config, yRange, 
     } else if (state === "dropout") {
       element.classList.add("chip-dropout");
     }
+  }
+
+  function renderHealthDetails(errors) {
+    const detected = Array.isArray(errors) ? errors : [];
+    dom.healthDetails.innerHTML = "<strong>Detected errors</strong>";
+    if (!detected.length) {
+      dom.healthDetails.insertAdjacentHTML("beforeend", '<span class="health-empty">No captured errors in this loop</span>');
+      return;
+    }
+
+    const list = document.createElement("ul");
+    detected.forEach(function (error) {
+      const item = document.createElement("li");
+      item.textContent = "Bit " + error.bit + ": " + error.message;
+      list.appendChild(item);
+    });
+    dom.healthDetails.appendChild(list);
   }
 
   function setMetricState(element, state) {

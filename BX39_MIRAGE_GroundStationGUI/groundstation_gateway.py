@@ -18,6 +18,7 @@ import json
 import math
 import os
 import queue
+import re
 import socketserver
 import struct
 import threading
@@ -37,7 +38,7 @@ SENSOR_STRUCT_FORMAT = (
     "HHfHH"     # LPL block: uflt_ir, flt_ir, uflt_conc, uflt_error, flt_error
     "HHfHH"     # SPL block: uflt_ir, flt_ir, uflt_conc, uflt_error, flt_error
     "H"         # K96_error (uint16_t)
-    "5BH3B"     # Packet flags & thermal status (operating_mode, command_received, connection_lost, status_ok, pressure_system_on, heater_mask(H), thermal_online, thermal_state, thermal_error)
+    "5BH3BQ"    # Packet flags, thermal status, and captured_errors(uint64)
 )
 
 STATUS_PACKET_SIZE = struct.calcsize(SENSOR_STRUCT_FORMAT)
@@ -48,6 +49,51 @@ MODE_NAMES = {
     3: "MEASUREMENTS",
     4: "HUMIDITY",
 }
+
+ERROR_MANIFEST_PATH = Path(__file__).resolve().parents[2] / "main-mcu" / "main" / "ErrorBits.def"
+
+
+def load_error_messages() -> list[str]:
+    messages: dict[int, str] = {}
+    for line in ERROR_MANIFEST_PATH.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("//"):
+            continue
+        match = re.fullmatch(r'ERROR_BIT\((\d+),\s*(".*")\)', line)
+        if not match:
+            raise ValueError(f"invalid error manifest line: {line}")
+        bit = int(match.group(1))
+        message = json.loads(match.group(2))
+        if bit in messages:
+            raise ValueError(f"duplicate error bit in manifest: {bit}")
+        messages[bit] = message
+
+    expected_bits = list(range(len(messages)))
+    if sorted(messages) != expected_bits:
+        raise ValueError("error manifest bits must be contiguous from zero")
+    return [messages[bit] for bit in expected_bits]
+
+
+ERROR_MESSAGES = load_error_messages()
+
+
+def decode_captured_errors(captured_errors: int) -> list[dict[str, Any]]:
+    errors = []
+    known_mask = 0
+    for bit, message in enumerate(ERROR_MESSAGES):
+        bit_mask = 1 << bit
+        known_mask |= bit_mask
+        if captured_errors & bit_mask:
+            errors.append({"bit": bit, "message": message})
+
+    unknown = captured_errors & ~known_mask
+    bit = len(ERROR_MESSAGES)
+    while unknown:
+        if unknown & 1:
+            errors.append({"bit": bit, "message": f"Unknown captured error (bit {bit})"})
+        unknown >>= 1
+        bit += 1
+    return errors
 
 
 def recv_exact(sock, size: int) -> bytes:
@@ -84,6 +130,8 @@ def pressure_to_hpa(value: float) -> float:
 
 def evaluate_health(frame: dict[str, Any]) -> str:
     if frame.get("connectionLost") or not frame.get("statusOk", True):
+        return "fault"
+    if frame.get("capturedErrors", 0):
         return "fault"
     if frame.get("thermalError", 0):
         return "warning"
@@ -178,6 +226,7 @@ def parse_status_packet(data: bytes, seq: int = 0, timestamp_ms: int | None = No
         thermal_online,
         thermal_state,
         thermal_error,
+        captured_errors,
     ) = values
 
     timestamp = timestamp_ms if timestamp_ms is not None else int(time.time() * 1000)
@@ -202,6 +251,7 @@ def parse_status_packet(data: bytes, seq: int = 0, timestamp_ms: int | None = No
         "humidityRh_ambient": finite_number(ha1),
         "humidityRh_k96": finite_number(k96_rh),
         "ambientPressureBar": finite_number(pa1),
+        "ambientPressureHpa": finite_number(pa1) * 1000.0,
         "Interstage_1Bar": finite_number(pp3) + finite_number(pa1),
         "Interstage_2Bar": finite_number(pp1) + finite_number(pa1),
         "pump1C": finite_number(tp1),
@@ -242,6 +292,8 @@ def parse_status_packet(data: bytes, seq: int = 0, timestamp_ms: int | None = No
         "thermalOnline": bool(thermal_online),
         "thermalState": int(thermal_state),
         "thermalError": int(thermal_error),
+        "capturedErrors": int(captured_errors),
+        "errors": decode_captured_errors(int(captured_errors)),
         "commandReceived": bool(command_received),
         "connectionLost": bool(connection_lost),
         "statusOk": bool(status_ok),
