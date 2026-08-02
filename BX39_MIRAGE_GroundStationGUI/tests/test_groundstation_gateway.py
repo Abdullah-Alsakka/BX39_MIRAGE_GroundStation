@@ -68,6 +68,15 @@ def make_status_packet(
         thermal_online,
         2,
         thermal_error,
+        2,              # pressure state
+        0,              # pressure error
+        0x0B,           # relay mask
+        180,            # pump 1 PWM
+        0,              # pump 2 PWM
+        120,            # compressor PWM
+        1,              # valve open
+        1,              # manual relay override
+        1,              # valve open
         captured_errors,
     )
 
@@ -93,6 +102,11 @@ class StatusPacketParserTest(unittest.TestCase):
         self.assertAlmostEqual(frame["ambientPressureHpa"], 900.0, places=1)
         self.assertTrue(frame["pressureSystemOn"])
         self.assertTrue(frame["peripherals"]["pump1"])
+        self.assertEqual(frame["pump1DutyPct"], 180)
+        self.assertTrue(frame["relayLines"]["relay1"])
+        self.assertTrue(frame["relayLines"]["relay4"])
+        self.assertTrue(frame["peripherals"]["outletValve"])
+        self.assertTrue(frame["pressureValveOpen"])
         self.assertEqual(frame["heaterMask"], 0x0D)
         self.assertTrue(frame["thermalOnline"])
         self.assertEqual(frame["errors"], [])

@@ -38,10 +38,16 @@ SENSOR_STRUCT_FORMAT = (
     "HHfHH"     # LPL block: uflt_ir, flt_ir, uflt_conc, uflt_error, flt_error
     "HHfHH"     # SPL block: uflt_ir, flt_ir, uflt_conc, uflt_error, flt_error
     "H"         # K96_error (uint16_t)
-    "5BH3BQ"    # Packet flags, thermal status, and captured_errors(uint64)
+    "5BH12BQ"   # Packet flags, thermal status, pressure actuator status, captured_errors
 )
 
 STATUS_PACKET_SIZE = struct.calcsize(SENSOR_STRUCT_FORMAT)
+EXPECTED_STATUS_PACKET_SIZE = 206
+if STATUS_PACKET_SIZE != EXPECTED_STATUS_PACKET_SIZE:
+    raise RuntimeError(
+        f"groundstation packet layout is {STATUS_PACKET_SIZE} bytes; "
+        f"main MCU transmits {EXPECTED_STATUS_PACKET_SIZE} bytes"
+    )
 
 MODE_NAMES = {
     1: "TEST_LOOP",
@@ -226,6 +232,15 @@ def parse_status_packet(data: bytes, seq: int = 0, timestamp_ms: int | None = No
         thermal_online,
         thermal_state,
         thermal_error,
+        pressure_state,
+        pressure_error,
+        pressure_relay_mask,
+        pressure_pump1_pwm,
+        pressure_pump2_pwm,
+        pressure_compressor_pwm,
+        pressure_actuator_mask,
+        pressure_manual_override,
+        pressure_valve_open,
         captured_errors,
     ) = values
 
@@ -265,26 +280,26 @@ def parse_status_packet(data: bytes, seq: int = 0, timestamp_ms: int | None = No
         "ambientTempC_TMP": finite_number(ta1),
         "ambientTempC_MS": finite_number(ta3),
         "ambientTempC_SHT": finite_number(ta2),
-        "pumpDutyPct": 100 if pressure_system_on else 0,
-        "pump1DutyPct": 100 if pressure_system_on else 0,
-        "pump2DutyPct": 100 if pressure_system_on else 0,
-        "compressorDutyPct": 100 if pressure_system_on else 0,
+        "pumpDutyPct": max(int(pressure_pump1_pwm), int(pressure_pump2_pwm)),
+        "pump1DutyPct": int(pressure_pump1_pwm),
+        "pump2DutyPct": int(pressure_pump2_pwm),
+        "compressorDutyPct": int(pressure_compressor_pwm),
         "heaterDutyPct": 100 if heater_mask else 0,
         "coolerDutyPct": 0,
-        "outletValveOpen": False,
+        "outletValveOpen": bool(pressure_valve_open),
         "pressureSystemOn": bool(pressure_system_on),
         "heaterMask": int(heater_mask),
         "peripherals": {
-            "pump1": bool(pressure_system_on),
-            "pump2": bool(pressure_system_on),
-            "compressor": bool(pressure_system_on),
-            "outletValve": False,
+            "pump1": bool(pressure_pump1_pwm),
+            "pump2": bool(pressure_pump2_pwm),
+            "compressor": bool(pressure_compressor_pwm),
+            "outletValve": bool(pressure_valve_open),
         },
         "relayLines": {
-            "relay1": False,
-            "relay2": False,
-            "relay3": False,
-            "relay4": False,
+            "relay1": bool(pressure_relay_mask & 0x01),
+            "relay2": bool(pressure_relay_mask & 0x02),
+            "relay3": bool(pressure_relay_mask & 0x04),
+            "relay4": bool(pressure_relay_mask & 0x08),
         },
         "onboardLogging": True,
         "storageFreePct": 100,
@@ -292,6 +307,14 @@ def parse_status_packet(data: bytes, seq: int = 0, timestamp_ms: int | None = No
         "thermalOnline": bool(thermal_online),
         "thermalState": int(thermal_state),
         "thermalError": int(thermal_error),
+        "pressureState": int(pressure_state),
+        "pressureError": int(pressure_error),
+        "pressureRelayMask": int(pressure_relay_mask),
+        "pressurePump1Pwm": int(pressure_pump1_pwm),
+        "pressurePump2Pwm": int(pressure_pump2_pwm),
+        "pressureCompressorPwm": int(pressure_compressor_pwm),
+        "pressureValveOpen": bool(pressure_valve_open),
+        "pressureManualOverride": bool(pressure_manual_override),
         "capturedErrors": int(captured_errors),
         "errors": decode_captured_errors(int(captured_errors)),
         "commandReceived": bool(command_received),
