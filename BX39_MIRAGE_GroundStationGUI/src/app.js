@@ -31,6 +31,7 @@
 
   const DEFAULT_HEATER_MASK = 0x0d;
   const DEFAULT_COOLER_MASK = 0x62;
+  const MOCK_DATA_ENABLED = false;
 
   const COMMANDS = {
     startExperiment: {
@@ -56,6 +57,15 @@
         sim.pressurisationActive = false;
         sim.setPressureTrain(false);
         return "autonomous Standby loop requested";
+      }
+    },
+    resetModeOverride: {
+      label: "reset mode override",
+      wireCommand: "MODE OVERRIDE RESET",
+      aliases: ["reset mode override", "override reset", "reset override"],
+      effect: function (sim) {
+        sim.manual_mode_overwrite = false;
+        return "mode override reset";
       }
     },
     startPressurisation: {
@@ -423,6 +433,7 @@
   const commandAliases = buildCommandAliases(COMMANDS);
   const history = [];
   let latestTelemetry = null;
+  let latestMissionMode = null;
   let lastGoodFrameAt = 0;
   let previousHealth = "unknown";
   let previousLinkStatus = "unknown";
@@ -1145,6 +1156,8 @@
           this.onLogEvent("info", "Payload command socket connected", "GUI commands now route to the local gateway");
         }
 
+        setChip(dom.linkState, "E-Link online", "healthy");
+
         if (!this.connected) {
           this.onLogEvent("info", "E-Link gateway ready", "waiting for first decoded payload status frame");
         }
@@ -1152,10 +1165,17 @@
       }
 
       if (activeCommandRouter === gatewayCommandRouter) {
-        activeCommandRouter = mockCommandRouter;
-        terminal.write("payload command socket disconnected; local mock command route resumed", "warn");
-        this.onLogEvent("dropout", "Payload command socket disconnected", "GUI commands are back on the local mock route");
+        if (MOCK_DATA_ENABLED) {
+          activeCommandRouter = mockCommandRouter;
+          terminal.write("payload command socket disconnected; local mock route resumed", "warn");
+          this.onLogEvent("dropout", "Payload command socket disconnected", "GUI commands are back on the local mock route");
+        } else {
+          terminal.write("payload command socket disconnected; telemetry halted until reconnect", "warn");
+          this.onLogEvent("dropout", "Payload command socket disconnected", "mock telemetry fallback is disabled");
+        }
       }
+      setChip(dom.linkState, "E-Link dropout", "dropout");
+      setChip(dom.missionMode, resolveMissionMode(latestTelemetry), "neutral");
 
       if (this.connected) {
         this.connected = false;
@@ -1165,10 +1185,13 @@
 
     handleError() {
       if (this.connected) {
-        this.onLogEvent("dropout", "Ground-station gateway disconnected", "browser SSE stream dropped; local mock telemetry resumed");
+        this.onLogEvent("dropout", "Ground-station gateway disconnected", MOCK_DATA_ENABLED ? "browser SSE stream dropped; local mock telemetry resumed" : "browser SSE stream dropped; telemetry is unavailable");
         this.connected = false;
         this.onDisconnect();
       }
+
+      setChip(dom.linkState, "E-Link dropout", "dropout");
+      setChip(dom.missionMode, resolveMissionMode(latestTelemetry), "neutral");
     }
 
     logFrame(sample) {
@@ -1215,16 +1238,18 @@
   let activeCommandRouter = mockCommandRouter;
 
   function init() {
-    terminal.write("MIRAGE ground-station terminal ready on local mock route.");
+    terminal.write(MOCK_DATA_ENABLED ? "MIRAGE ground-station terminal ready on local mock route." : "MIRAGE ground-station terminal ready; waiting for gateway telemetry.");
     terminal.write("Type help for available manual commands.");
-    log.add("info", "Ground station initialized", "mock telemetry and mock uplink adapters active");
+    log.add("info", "Ground station initialized", MOCK_DATA_ENABLED ? "mock telemetry and mock uplink adapters active" : "mock telemetry disabled; awaiting payload connection");
 
     bindCommands();
     bindTerminal();
     bindViewSwitch();
     mockCommandRouter.on(handleCommandEvent);
     gatewayCommandRouter.on(handleCommandEvent);
-    mockTelemetrySource.start();
+    if (MOCK_DATA_ENABLED) {
+      mockTelemetrySource.start();
+    }
     gatewayTelemetrySource.start();
     window.setInterval(updateFrameAge, 1000);
     window.addEventListener("resize", drawAllCharts);
@@ -1383,6 +1408,10 @@
       history.shift();
     }
 
+    if (sample && typeof sample.mode === "string" && sample.mode) {
+      latestMissionMode = sample.mode;
+    }
+
     if (sample.valid) {
       latestTelemetry = sample;
       lastGoodFrameAt = sample.timestamp;
@@ -1399,7 +1428,7 @@
     const linkQuality = sample.valid ? sample.linkQuality : 0;
 
     setChip(dom.overallHealth, healthLabel(health), health);
-    setChip(dom.missionMode, display ? display.mode : simulator.mode, "neutral");
+    setChip(dom.missionMode, resolveMissionMode(display), "neutral");
     setChip(dom.linkState, linkLabel(linkStatus), linkStatus === "ONLINE" ? "healthy" : linkStatus === "DEGRADED" ? "warning" : "dropout");
 
     dom.frameNumber.textContent = display && display.seq ? String(display.seq) : "--";
@@ -1465,14 +1494,16 @@
 
     usingGateway = true;
     activeCommandRouter = gatewayCommandRouter;
-    mockTelemetrySource.stop();
+    if (MOCK_DATA_ENABLED) {
+      mockTelemetrySource.stop();
+    }
     history.length = 0;
     latestTelemetry = null;
     lastGoodFrameAt = 0;
     previousHealth = "unknown";
     previousLinkStatus = "unknown";
     terminal.write("E-Link gateway connected; telemetry is now decoded from the payload TCP status stream.");
-    log.add("info", "Live gateway connected", "local Python gateway replaced mock telemetry and mock uplink routing");
+    log.add("info", "Live gateway connected", MOCK_DATA_ENABLED ? "local Python gateway replaced mock telemetry and mock uplink routing" : "local Python gateway is now the only telemetry source");
   }
 
   function handleGatewayDisconnected() {
@@ -1481,9 +1512,17 @@
     }
 
     usingGateway = false;
-    activeCommandRouter = mockCommandRouter;
-    mockTelemetrySource.start();
-    terminal.write("gateway disconnected; local mock route resumed", "warn");
+    if (MOCK_DATA_ENABLED) {
+      activeCommandRouter = mockCommandRouter;
+      mockTelemetrySource.start();
+      terminal.write("gateway disconnected; local mock route resumed", "warn");
+    } else {
+      activeCommandRouter = gatewayCommandRouter;
+      terminal.write("gateway disconnected; telemetry halted until payload reconnects", "warn");
+    }
+
+    setChip(dom.linkState, "E-Link dropout", "dropout");
+    setChip(dom.missionMode, resolveMissionMode(latestTelemetry), "neutral");
   }
 
   function applyCommandedState(commandId) {
@@ -2299,6 +2338,24 @@ function drawTooltip(ctx, hoverPos, samples, pad, plotW, plotH, config, yRange, 
       return "E-Link degraded";
     }
     return "E-Link dropout";
+  }
+
+  function resolveMissionMode(sample) {
+    if (sample) {
+      if (typeof sample.missionMode === "string" && sample.missionMode) {
+        return sample.missionMode;
+      }
+
+      if (typeof sample.mode === "string" && sample.mode) {
+        return sample.mode;
+      }
+
+      if (typeof sample.mode === "number" && Number.isFinite(sample.mode)) {
+        return "MODE_" + sample.mode;
+      }
+    }
+
+    return latestMissionMode || "No telemetry";
   }
 
   function formatStatusLine(sample) {

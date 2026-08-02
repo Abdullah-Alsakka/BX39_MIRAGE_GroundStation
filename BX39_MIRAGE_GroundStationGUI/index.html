@@ -18,7 +18,7 @@
           </div>
           <div class="mission-chips" aria-label="Current MIRAGE state">
             <span id="overallHealth" class="chip chip-ok">Healthy</span>
-            <span id="missionMode" class="chip">Standby</span>
+            <span id="missionMode" class="chip">No telemetry</span>
             <span id="linkState" class="chip chip-ok">E-Link online</span>
           </div>
         </header>
@@ -45,7 +45,7 @@
         <div class="panel-resize-handle" id="commandResizeHandle" aria-label="Resize command pane"></div>
         <header class="panel-header">
           <div>
-            <p class="eyebrow">Mock uplink</p>
+            <p class="eyebrow">Command uplink</p>
             <h2 id="commands-title">Mission Commands</h2>
           </div>
           <span id="commandStatus" class="command-status">Ready</span>
@@ -57,8 +57,9 @@
             <div class="command-grid">
               <button type="button" data-command="startExperiment">Start experiment</button>
               <button type="button" data-command="enterStandby">Enter standby</button>
-              <button type="button" data-command="requestStatus">Request status update</button>
-              <button type="button" data-command="pingExperiment">Ping experiment</button>
+              <button type="button" data-command="resetModeOverride">Reset mode override</button>
+              <button type="button" data-command="requestStatus" style="display: none;">Request status update</button>
+              <button type="button" data-command="pingExperiment" style="display: none;">Ping experiment</button>
             </div>
           </section>
 
@@ -118,7 +119,7 @@
       <section class="panel telemetry-panel" aria-labelledby="telemetry-title">
         <header class="panel-header">
           <div>
-            <p class="eyebrow">1 Hz mock downlink</p>
+            <p class="eyebrow">1 Hz downlink</p>
             <h2 id="telemetry-title">Live Telemetry</h2>
           </div>
           <div class="telemetry-header-tools">
