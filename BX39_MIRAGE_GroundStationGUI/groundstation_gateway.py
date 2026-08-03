@@ -38,11 +38,11 @@ SENSOR_STRUCT_FORMAT = (
     "HHfHH"     # LPL block: uflt_ir, flt_ir, uflt_conc, uflt_error, flt_error
     "HHfHH"     # SPL block: uflt_ir, flt_ir, uflt_conc, uflt_error, flt_error
     "H"         # K96_error (uint16_t)
-    "5BH11BQ"   # Packet flags, thermal status, pressure status, captured_errors
+    "5BH11B16s" # Packet flags, thermal status, pressure status, 128-bit captured_errors
 )
 
 STATUS_PACKET_SIZE = struct.calcsize(SENSOR_STRUCT_FORMAT)
-EXPECTED_STATUS_PACKET_SIZE = 205
+EXPECTED_STATUS_PACKET_SIZE = 213
 if STATUS_PACKET_SIZE != EXPECTED_STATUS_PACKET_SIZE:
     raise RuntimeError(
         f"groundstation packet layout is {STATUS_PACKET_SIZE} bytes; "
@@ -240,9 +240,10 @@ def parse_status_packet(data: bytes, seq: int = 0, timestamp_ms: int | None = No
         pressure_compressor_pwm,
         pressure_manual_override,
         pressure_valve_open,
-        captured_errors,
+        captured_errors_bytes,
     ) = values
 
+    captured_errors = int.from_bytes(captured_errors_bytes, byteorder="little")
     timestamp = timestamp_ms if timestamp_ms is not None else int(time.time() * 1000)
     link_status = "DROPOUT" if connection_lost else "ONLINE"
     link_quality = 0 if connection_lost else 100

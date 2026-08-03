@@ -76,15 +76,15 @@ def make_status_packet(
         120,            # compressor PWM
             1,              # manual relay override
             1,              # valve open
-        captured_errors,
+        int(captured_errors).to_bytes(16, byteorder="little"),
     )
 
 
 class StatusPacketParserTest(unittest.TestCase):
     def test_error_manifest_is_shared_and_contiguous(self):
-        self.assertEqual(len(gateway.ERROR_MESSAGES), 57)
+        self.assertEqual(len(gateway.ERROR_MESSAGES), 75)
         self.assertEqual(gateway.ERROR_MESSAGES[0], "Ethernet SPI read transaction failed")
-        self.assertEqual(gateway.ERROR_MESSAGES[56], "Sensor data file open failed")
+        self.assertEqual(gateway.ERROR_MESSAGES[74], "RTC Read failure")
         self.assertTrue(gateway.ERROR_MANIFEST_PATH.exists())
 
     def test_decodes_main_system_status_packet(self):
@@ -118,6 +118,10 @@ class StatusPacketParserTest(unittest.TestCase):
         self.assertEqual(frame["health"], "fault")
         self.assertEqual([error["bit"] for error in frame["errors"]], [0, 55])
         self.assertIn("Ethernet SPI read", frame["errors"][0]["message"])
+
+    def test_decodes_high_captured_error_bits(self):
+        frame = gateway.parse_status_packet(make_status_packet(captured_errors=1 << 74))
+        self.assertEqual(frame["errors"], [{"bit": 74, "message": "RTC Read failure"}])
 
     def test_connection_lost_packet_becomes_dropout(self):
         frame = gateway.parse_status_packet(make_status_packet(connection_lost=1), seq=7)
