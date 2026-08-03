@@ -48,13 +48,45 @@ input {
 }
 
 .console-grid {
+  --left-column-width: 0.95fr;
+  --right-column-width: 1.35fr;
   display: grid;
-  grid-template-columns: minmax(390px, 0.95fr) minmax(520px, 1.35fr);
-  gap: 12px;
+  grid-template-columns: minmax(390px, var(--left-column-width)) 10px minmax(520px, var(--right-column-width));
+  column-gap: 6px;
+  row-gap: 12px;
   height: 100vh;
   padding: 12px;
   box-sizing: border-box;
   overflow: hidden;
+}
+
+.column-resize-handle {
+  position: relative;
+  z-index: 5;
+  width: 10px;
+  height: 100%;
+  cursor: ew-resize;
+  border-radius: 999px;
+  outline: none;
+}
+
+.column-resize-handle::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 3px;
+  height: 42px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.25);
+  transform: translate(-50%, -50%);
+  transition: background-color 0.15s ease;
+}
+
+.column-resize-handle:hover::after,
+.column-resize-handle:focus-visible::after,
+.console-grid.is-resizing-columns .column-resize-handle::after {
+  background: rgba(255, 255, 255, 0.7);
 }
 
 /* Column Wrapper: Isolates vertical sizing between left and right sides */
@@ -392,7 +424,7 @@ h3 {
   min-height: 0;
   flex: 1;
   flex-direction: column;
-  overflow-y: auto;
+  overflow: auto;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
 }
@@ -407,6 +439,7 @@ h3 {
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 8px;
   padding: 10px 12px;
+  min-width: 520px;
   border-bottom: 1px solid var(--line-soft);
 }
 
@@ -458,6 +491,7 @@ h3 {
   grid-auto-rows: minmax(280px, 1fr); /* Generates uniform, scaled chart rows */
   gap: 8px;
   min-height: 0;                     
+  min-width: 620px;
   flex: 1;
   padding: 10px 12px 12px;
 }
@@ -542,6 +576,7 @@ canvas {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
   min-height: 0;
+  min-width: 520px;
   padding: 12px;
   overflow: auto;
 }
@@ -953,7 +988,7 @@ canvas {
 
 @media (max-width: 1180px) {
   .console-grid {
-    grid-template-columns: minmax(330px, 1fr) minmax(420px, 1.15fr);
+    grid-template-columns: minmax(330px, var(--left-column-width)) 10px minmax(420px, var(--right-column-width));
     grid-template-rows: minmax(360px, 0.95fr) minmax(390px, 1fr);
   }
 
@@ -980,6 +1015,10 @@ canvas {
     grid-template-rows: repeat(4, minmax(420px, auto));
     height: auto;
     min-height: 100vh;
+  }
+
+  .column-resize-handle {
+    display: none;
   }
 
   .mission-header,

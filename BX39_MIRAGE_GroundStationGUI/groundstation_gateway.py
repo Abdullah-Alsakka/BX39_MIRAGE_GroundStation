@@ -38,11 +38,11 @@ SENSOR_STRUCT_FORMAT = (
     "HHfHH"     # LPL block: uflt_ir, flt_ir, uflt_conc, uflt_error, flt_error
     "HHfHH"     # SPL block: uflt_ir, flt_ir, uflt_conc, uflt_error, flt_error
     "H"         # K96_error (uint16_t)
-    "5BH12BQ"   # Packet flags, thermal status, pressure actuator status, captured_errors
+    "5BH11BQ"   # Packet flags, thermal status, pressure status, captured_errors
 )
 
 STATUS_PACKET_SIZE = struct.calcsize(SENSOR_STRUCT_FORMAT)
-EXPECTED_STATUS_PACKET_SIZE = 206
+EXPECTED_STATUS_PACKET_SIZE = 205
 if STATUS_PACKET_SIZE != EXPECTED_STATUS_PACKET_SIZE:
     raise RuntimeError(
         f"groundstation packet layout is {STATUS_PACKET_SIZE} bytes; "
@@ -238,7 +238,6 @@ def parse_status_packet(data: bytes, seq: int = 0, timestamp_ms: int | None = No
         pressure_pump1_pwm,
         pressure_pump2_pwm,
         pressure_compressor_pwm,
-        pressure_actuator_mask,
         pressure_manual_override,
         pressure_valve_open,
         captured_errors,

@@ -2504,10 +2504,70 @@ function makePanelResizable(handleId) {
   });
 }
 
+function makeColumnsResizable() {
+  const grid = document.querySelector(".console-grid");
+  const handle = document.getElementById("columnResizeHandle");
+
+  if (!grid || !handle) return;
+
+  const minLeft = 330;
+  const minRight = 420;
+  let startX = 0;
+  let startLeft = 0;
+
+  const setColumns = (left, right) => {
+    grid.style.setProperty("--left-column-width", `${left}px`);
+    grid.style.setProperty("--right-column-width", `${right}px`);
+    handle.setAttribute("aria-valuenow", String(Math.round(left)));
+  };
+
+  const onMouseMove = (event) => {
+    const delta = event.clientX - startX;
+    const availableWidth = grid.clientWidth - 12 - 10;
+    const left = Math.max(minLeft, Math.min(availableWidth - minRight, startLeft + delta));
+    const right = Math.max(minRight, availableWidth - left);
+    setColumns(left, right);
+  };
+
+  const stopResizing = () => {
+    grid.classList.remove("is-resizing-columns");
+    document.body.style.userSelect = "";
+    document.removeEventListener("mousemove", onMouseMove);
+    document.removeEventListener("mouseup", stopResizing);
+  };
+
+  handle.addEventListener("mousedown", (event) => {
+    event.preventDefault();
+    const columns = grid.querySelectorAll(":scope > .console-column");
+    startX = event.clientX;
+    startLeft = columns[0].offsetWidth;
+    grid.classList.add("is-resizing-columns");
+    document.body.style.userSelect = "none";
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup", stopResizing);
+  });
+
+  handle.setAttribute("aria-valuemin", String(minLeft));
+  handle.setAttribute("aria-valuemax", String(Math.max(minLeft, grid.clientWidth - 12 - 10 - minRight)));
+  handle.setAttribute("aria-valuenow", String(Math.round(grid.querySelector(":scope > .console-column").offsetWidth)));
+
+  handle.addEventListener("keydown", (event) => {
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+    event.preventDefault();
+    const columns = grid.querySelectorAll(":scope > .console-column");
+    const currentLeft = columns[0].offsetWidth;
+    const availableWidth = grid.clientWidth - 12 - 10;
+    const nextLeft = currentLeft + (event.key === "ArrowRight" ? 20 : -20);
+    const left = Math.max(minLeft, Math.min(availableWidth - minRight, nextLeft));
+    setColumns(left, Math.max(minRight, availableWidth - left));
+  });
+}
+
 // Initialize resizers once DOM is fully loaded
 document.addEventListener("DOMContentLoaded", () => {
   makePanelResizable("commandResizeHandle");
   makePanelResizable("terminalResizeHandle");
+  makeColumnsResizable();
 });
 
   init();

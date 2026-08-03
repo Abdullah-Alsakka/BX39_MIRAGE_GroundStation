@@ -74,9 +74,8 @@ def make_status_packet(
         180,            # pump 1 PWM
         0,              # pump 2 PWM
         120,            # compressor PWM
-        1,              # valve open
-        1,              # manual relay override
-        1,              # valve open
+            1,              # manual relay override
+            1,              # valve open
         captured_errors,
     )
 
