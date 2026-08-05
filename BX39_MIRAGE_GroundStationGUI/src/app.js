@@ -1341,7 +1341,7 @@
     const normalized = normalizeCommand(raw);
 
     if (normalized === "help") {
-      terminal.write("commands: status, clear, start experiment, enter standby, start/stop pressurisation, open/close outlet valve, relay 1-4 on/off, pump 1/2 on/off, compressor on/off, enable/disable heating, enable/disable cooling, flush chamber, restart main controller, emergency stop, ping experiment");
+      terminal.write("commands: status, clear, start experiment, enter standby, start/stop pressurisation, open/close outlet valve, pwm1 0-100, pwm2 0-100, pwm3 0-100, relay 1-4 on/off, pump 1/2 on/off, compressor on/off, enable/disable heating, enable/disable cooling, flush chamber, restart main controller, emergency stop, ping experiment");
       return;
     }
 
@@ -1353,6 +1353,19 @@
 
     if (normalized === "status") {
       terminal.write(formatStatusLine(latestTelemetry));
+      return;
+    }
+
+    const pwmMatch = normalized.match(/^pwm([123])\s+(\d{1,3})$/);
+    if (pwmMatch) {
+      const percentage = Number(pwmMatch[2]);
+      if (percentage > 100) {
+        terminal.write("ERR PWM_VALUE; use a value from 0 to 100", "error");
+        return;
+      }
+      sendCommand(registerPwmCommand(Number(pwmMatch[1]), percentage), "terminal").catch(function () {
+        return undefined;
+      });
       return;
     }
 
@@ -2432,6 +2445,23 @@ function drawTooltip(ctx, hoverPos, samples, pad, plotW, plotH, config, yRange, 
       .replace(/[_-]+/g, " ")
       .replace(/\s+/g, " ")
       .trim();
+  }
+
+  function registerPwmCommand(pump, percentage) {
+    const commandId = "pwm" + pump + "_" + percentage;
+    if (!COMMANDS[commandId]) {
+      const label = "set pump " + pump + " PWM to " + percentage + "%";
+      COMMANDS[commandId] = {
+        label: label,
+        wireCommand: "PWM" + pump + " " + percentage,
+        aliases: [],
+        effect: function (sim) {
+          sim.setPeripheral(pump === 3 ? "compressor" : "pump" + pump, percentage > 0);
+          return label + " queued";
+        }
+      };
+    }
+    return commandId;
   }
 
   function formatClock(date) {
