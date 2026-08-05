@@ -23,6 +23,7 @@ import socketserver
 import struct
 import threading
 import time
+from datetime import datetime
 from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -38,11 +39,11 @@ SENSOR_STRUCT_FORMAT = (
     "HHfHH"     # LPL block: uflt_ir, flt_ir, uflt_conc, uflt_error, flt_error
     "HHfHH"     # SPL block: uflt_ir, flt_ir, uflt_conc, uflt_error, flt_error
     "H"         # K96_error (uint16_t)
-    "5BH11B16s" # Packet flags, thermal status, pressure status, 128-bit captured_errors
+    "5BH14B16s" # Flags, subsystem status, SD/controller status, 128-bit captured_errors
 )
 
 STATUS_PACKET_SIZE = struct.calcsize(SENSOR_STRUCT_FORMAT)
-EXPECTED_STATUS_PACKET_SIZE = 213
+EXPECTED_STATUS_PACKET_SIZE = 216
 if STATUS_PACKET_SIZE != EXPECTED_STATUS_PACKET_SIZE:
     raise RuntimeError(
         f"groundstation packet layout is {STATUS_PACKET_SIZE} bytes; "
@@ -54,6 +55,21 @@ MODE_NAMES = {
     2: "STANDBY",
     3: "MEASUREMENTS",
     4: "HUMIDITY",
+}
+
+CONTROLLER_STATES = {
+    0: "MAIN_MCU_BOOTING",
+    1: "MAIN_MCU_READY",
+    2: "MAIN_MCU_SAFE_SHUTDOWN",
+    3: "MAIN_MCU_RESTARTING",
+}
+
+PRESSURE_STATES = {
+    0: "STANDBY",
+    1: "PREPRESSURISATION",
+    2: "AIR_EXCHANGE",
+    3: "ERROR",
+    4: "FLUSH_CHAMBER",
 }
 
 ERROR_MANIFEST_PATH = Path(__file__).resolve().parents[2] / "main-mcu" / "main" / "ErrorBits.def"
@@ -141,10 +157,17 @@ def evaluate_health(frame: dict[str, Any]) -> str:
         return "fault"
     if frame.get("thermalError", 0):
         return "warning"
+    if frame.get("controller") == "MAIN_MCU_SAFE_SHUTDOWN":
+        return "fault"
+    if frame.get("controller") in {"MAIN_MCU_BOOTING", "MAIN_MCU_RESTARTING"}:
+        return "warning"
 
     chamber_pressure = finite_number(frame.get("chamberPressureBar"), 3.0)
-    chamber_temp = finite_number(frame.get("chamberTempC"), 21.0)
-    humidity = finite_number(frame.get("humidityRh"), 38.0)
+    chamber_temp = finite_number(
+        frame.get("chamberTempC_K96", frame.get("chamberTempC_MS")),
+        21.0,
+    )
+    humidity = finite_number(frame.get("humidityRh_ambient"), 38.0)
 
     if (
         chamber_pressure > 3.55
@@ -240,6 +263,9 @@ def parse_status_packet(data: bytes, seq: int = 0, timestamp_ms: int | None = No
         pressure_compressor_pwm,
         pressure_manual_override,
         pressure_valve_open,
+        onboard_logging,
+        storage_free_pct,
+        controller_state,
         captured_errors_bytes,
     ) = values
 
@@ -256,9 +282,9 @@ def parse_status_packet(data: bytes, seq: int = 0, timestamp_ms: int | None = No
         "linkStatus": link_status,
         "linkQuality": link_quality,
         "latencyMs": 0,
-        "methanePpm": finite_number(k96_lpl_uflt_conc),
-        "co2Ppm": finite_number(k96_spl_uflt_conc),
-        "waterPpm": finite_number(k96_mpl_uflt_conc),
+        "methaneRaw": int(k96_lpl_uflt_ir_signal),
+        "co2Raw": int(k96_spl_uflt_ir_signal),
+        "waterRaw": int(k96_mpl_uflt_ir_signal),
         "chamberPressureBar": finite_number(pp2),
         "chamberTempC_MS": finite_number(tp5),
         "chamberTempC_K96": finite_number(k96_rh_temp, 0.0),
@@ -280,7 +306,6 @@ def parse_status_packet(data: bytes, seq: int = 0, timestamp_ms: int | None = No
         "ambientTempC_TMP": finite_number(ta1),
         "ambientTempC_MS": finite_number(ta3),
         "ambientTempC_SHT": finite_number(ta2),
-        "pumpDutyPct": max(int(pressure_pump1_pwm), int(pressure_pump2_pwm)),
         "pump1DutyPct": int(pressure_pump1_pwm),
         "pump2DutyPct": int(pressure_pump2_pwm),
         "compressorDutyPct": int(pressure_compressor_pwm),
@@ -301,13 +326,23 @@ def parse_status_packet(data: bytes, seq: int = 0, timestamp_ms: int | None = No
             "relay3": bool(pressure_relay_mask & 0x04),
             "relay4": bool(pressure_relay_mask & 0x08),
         },
-        "onboardLogging": True,
-        "storageFreePct": 100,
-        "controller": "MAIN_MCU_READY",
+        "heater1ActuationPct": 100 if heater_mask & (1 << 0) else 0,
+        "heater2ActuationPct": 100 if heater_mask & (1 << 1) else 0,
+        "heater3ActuationPct": 100 if heater_mask & (1 << 2) else 0,
+        "heater4ActuationPct": 100 if heater_mask & (1 << 3) else 0,
+        "heater5ActuationPct": 100 if heater_mask & (1 << 4) else 0,
+        "heater6ActuationPct": 100 if heater_mask & (1 << 5) else 0,
+        "heater7ActuationPct": 100 if heater_mask & (1 << 6) else 0,
+        "heater8ActuationPct": 100 if heater_mask & (1 << 7) else 0,
+        "onboardLogging": bool(onboard_logging),
+        "storageFreePct": int(storage_free_pct),
+        "controller": CONTROLLER_STATES.get(controller_state, f"MAIN_MCU_STATE_{controller_state}"),
+        "controllerReady": controller_state == 1,
         "thermalOnline": bool(thermal_online),
         "thermalState": int(thermal_state),
         "thermalError": int(thermal_error),
         "pressureState": int(pressure_state),
+        "pressureStateName": PRESSURE_STATES.get(pressure_state, f"STATE_{pressure_state}"),
         "pressureError": int(pressure_error),
         "pressureRelayMask": int(pressure_relay_mask),
         "pressurePump1Pwm": int(pressure_pump1_pwm),
@@ -328,6 +363,12 @@ def parse_status_packet(data: bytes, seq: int = 0, timestamp_ms: int | None = No
     }
 
     frame["missionMode"] = frame["mode"]
+    if pressure_state == 4:
+        frame["activeTask"] = "FLUSH_CHAMBER"
+    elif pressure_state in {1, 2}:
+        frame["activeTask"] = "PRESSURISATION"
+    else:
+        frame["activeTask"] = None
     frame["health"] = evaluate_health(frame)
     if frame["connectionLost"]:
         frame["dropoutReason"] = "payload reported connection_lost in status packet"
@@ -338,26 +379,60 @@ def parse_status_packet(data: bytes, seq: int = 0, timestamp_ms: int | None = No
     return frame
 
 
-class GroundStationState:
-    def __init__(self) -> None:
+class SessionLog:
+    def __init__(self, logs_dir: Path) -> None:
+        logs_dir.mkdir(parents=True, exist_ok=True)
+        started_at = datetime.now().astimezone()
+        self.path = logs_dir / f"{started_at.strftime('%Y-%m-%d_%H-%M-%S')}.jsonl"
         self._lock = threading.Lock()
+        self.record("session", {"phase": "started"})
+
+    def record(self, event: str, data: dict[str, Any]) -> None:
+        entry = {
+            "capturedAt": datetime.now().astimezone().isoformat(timespec="milliseconds"),
+            "event": event,
+            "data": data,
+        }
+        encoded = json.dumps(entry, allow_nan=False, separators=(",", ":"))
+        with self._lock:
+            with self.path.open("a", encoding="utf-8") as log_file:
+                log_file.write(encoded + "\n")
+
+
+class GroundStationState:
+    def __init__(self, session_log: SessionLog | None = None) -> None:
+        self._lock = threading.RLock()
+        self._frame_condition = threading.Condition(self._lock)
+        self._command_lock = threading.Lock()
         self._clients: list[queue.Queue[dict[str, Any]]] = []
         self._payload_conn = None
         self._payload_addr = None
         self._seq = 0
         self._last_frame: dict[str, Any] | None = None
+        self._session_log = session_log
+
+    def log(self, event: str, data: dict[str, Any]) -> None:
+        if self._session_log:
+            self._session_log.record(event, data)
 
     def attach_payload(self, conn, addr) -> None:
-        with self._lock:
+        with self._frame_condition:
             self._payload_conn = conn
             self._payload_addr = addr
+            self._frame_condition.notify_all()
+        self.log("connection", {"phase": "payload_connected", "address": f"{addr[0]}:{addr[1]}"})
         self.broadcast_gateway_status()
 
     def detach_payload(self, conn) -> None:
-        with self._lock:
+        detached = False
+        with self._frame_condition:
             if self._payload_conn is conn:
                 self._payload_conn = None
                 self._payload_addr = None
+                detached = True
+                self._frame_condition.notify_all()
+        if detached:
+            self.log("connection", {"phase": "payload_disconnected"})
         self.broadcast_gateway_status()
 
     def add_client(self) -> queue.Queue[dict[str, Any]]:
@@ -377,33 +452,72 @@ class GroundStationState:
                 self._clients.remove(client_queue)
 
     def next_frame(self, packet: bytes) -> dict[str, Any]:
-        with self._lock:
+        with self._frame_condition:
             self._seq += 1
             seq = self._seq
 
         frame = parse_status_packet(packet, seq=seq)
-        with self._lock:
+        with self._frame_condition:
             self._last_frame = frame
+            self._frame_condition.notify_all()
+        self.log("telemetry", frame)
         self.broadcast("telemetry", frame)
         return frame
 
-    def send_command(self, command: str) -> tuple[bool, str]:
+    def send_command(
+        self,
+        command: str,
+        metadata: dict[str, Any] | None = None,
+        ack_timeout: float = 3.5,
+    ) -> tuple[bool, str]:
         payload = command.strip()
         if not payload:
             return False, "empty command"
 
-        with self._lock:
-            conn = self._payload_conn
+        command_log = dict(metadata or {})
+        command_log["wireCommand"] = payload
 
-        if conn is None:
-            return False, "no payload TCP connection is active"
+        with self._command_lock:
+            with self._frame_condition:
+                conn = self._payload_conn
+                starting_seq = self._seq
 
-        try:
-            conn.sendall(payload.encode("utf-8"))
-        except OSError as exc:
-            return False, f"payload command send failed: {exc}"
+            if conn is None:
+                message = "no payload TCP connection is active"
+                self.log("command", {**command_log, "phase": "rejected", "message": message})
+                return False, message
 
-        return True, f"sent '{payload}' to payload TCP connection"
+            self.log("command", {**command_log, "phase": "sent", "afterSeq": starting_seq})
+            try:
+                conn.sendall(payload.encode("utf-8"))
+            except OSError as exc:
+                message = f"payload command send failed: {exc}"
+                self.log("command", {**command_log, "phase": "failed", "message": message})
+                return False, message
+
+            deadline = time.monotonic() + ack_timeout
+            with self._frame_condition:
+                while True:
+                    frame = self._last_frame
+                    if frame and frame["seq"] > starting_seq and frame.get("commandReceived"):
+                        message = f"payload acknowledged '{payload}' in telemetry frame {frame['seq']}"
+                        self.log(
+                            "command",
+                            {**command_log, "phase": "acknowledged", "ackSeq": frame["seq"], "message": message},
+                        )
+                        return True, message
+
+                    if self._payload_conn is not conn:
+                        message = "payload disconnected before acknowledging command"
+                        self.log("command", {**command_log, "phase": "failed", "message": message})
+                        return False, message
+
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        message = "payload did not acknowledge command before timeout"
+                        self.log("command", {**command_log, "phase": "timeout", "message": message})
+                        return False, message
+                    self._frame_condition.wait(timeout=remaining)
 
     def gateway_status(self) -> dict[str, Any]:
         with self._lock:
@@ -418,6 +532,7 @@ class GroundStationState:
             "browserClients": client_count,
             "lastSeq": last_frame["seq"] if last_frame else None,
             "packetSize": STATUS_PACKET_SIZE,
+            "logFile": str(self._session_log.path) if self._session_log else None,
         }
 
     def broadcast_gateway_status(self) -> None:
@@ -505,7 +620,12 @@ def make_http_handler(static_root: Path, state: GroundStationState):
                 return
 
             command = str(payload.get("wireCommand", "")).strip()
-            ok, message = state.send_command(command)
+            metadata = {
+                key: payload[key]
+                for key in ("requestId", "commandId", "label", "origin")
+                if key in payload
+            }
+            ok, message = state.send_command(command, metadata=metadata)
             status = HTTPStatus.OK if ok else HTTPStatus.SERVICE_UNAVAILABLE
             self.send_json(status, {"ok": ok, "message": message})
 
@@ -552,7 +672,8 @@ def make_http_handler(static_root: Path, state: GroundStationState):
 
 
 def run_servers(host: str, http_port: int, payload_port: int, static_root: Path) -> None:
-    state = GroundStationState()
+    session_log = SessionLog(static_root / "logs")
+    state = GroundStationState(session_log)
 
     PayloadTCPHandler.state = state
     payload_server = ReusableThreadingTCPServer((host, payload_port), PayloadTCPHandler)
@@ -565,12 +686,14 @@ def run_servers(host: str, http_port: int, payload_port: int, static_root: Path)
 
     print(f"MIRAGE GUI: http://127.0.0.1:{http_port}")
     print(f"Payload TCP listener: {host}:{payload_port} expecting {STATUS_PACKET_SIZE} byte status packets")
+    print(f"Session log: {session_log.path}")
 
     try:
         http_server.serve_forever()
     except KeyboardInterrupt:
         print("\nShutting down MIRAGE ground-station gateway")
     finally:
+        session_log.record("session", {"phase": "stopped"})
         http_server.shutdown()
         payload_server.shutdown()
         http_server.server_close()

@@ -1,6 +1,6 @@
 # MIRAGE Ground Station GUI
 
-Open `index.html` in a browser to run the mock MIRAGE mission-control console. No backend or package install is required for the simulator mode.
+The live console uses the local Python gateway; no package installation is required.
 
 For live ground-station operation, run the local gateway:
 
@@ -8,7 +8,9 @@ For live ground-station operation, run the local gateway:
 python3 groundstation_gateway.py
 ```
 
-Then open `http://127.0.0.1:8080`. The gateway serves the GUI, listens for the main MCU's TCP status stream on port `5001`, decodes the packed `MainSystemStatusPacket`, streams telemetry to the browser, and sends GUI/terminal commands back over the active payload TCP connection.
+Then open `http://127.0.0.1:8080`. The gateway serves the GUI, listens for the main MCU's TCP status stream on port `5001`, decodes the packed 216-byte `MainSystemStatusPacket`, streams telemetry to the browser, and sends GUI/terminal commands back over the active payload TCP connection. A command is acknowledged only after a newer payload status packet reports that a recognized command was received.
+
+Each gateway run creates `logs/YYYY-MM-DD_HH-MM-SS.jsonl`. The file records every decoded telemetry frame, command lifecycle event, and payload connection event with a local ISO timestamp. The `logs/` directory is ignored by Git.
 
 ## Replacement Points
 
@@ -30,9 +32,12 @@ The gateway sends the `wireCommand` string from each frontend command definition
 - `COMPRESSOR ON/OFF`
 - `VALVE OPEN/CLOSE`
 - `PRESSURE ON/OFF`
+- `FLUSH CHAMBER`
 - `MODE STANDBY` and `MODE MEASUREMENTS`
+- `REBOOT`
+- `EMERGENCY STOP`
 
-Until the flight firmware reports individual relay/peripheral state bits in telemetry, the GUI shows the last acknowledged commanded state for those lines.
+The status packet reports SD free percentage, main-controller state, pressure task state, individual pump/compressor PWM, relay/peripheral state, and the eight-bit heater mask. Gas plots use the K96 unfiltered raw IR detector channels rather than calculated ppm concentrations.
 
 ## Operator Scope
 

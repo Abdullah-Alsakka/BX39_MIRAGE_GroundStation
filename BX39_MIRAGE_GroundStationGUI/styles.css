@@ -353,11 +353,11 @@ h3 {
 
 .status-strip strong {
   display: block;
+  min-height: 2.05em;
   margin-top: 4px;
-  overflow: hidden;
   font-size: 0.92rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.05;
+  overflow-wrap: anywhere;
 }
 
 .log-feed {
@@ -556,6 +556,17 @@ h3 {
 .link { background: #61d394; }
 .pump { background: #f0c15b; }
 .thermal { background: #ff9f57; }
+.pump1-actuation { background: #f0c15b; }
+.pump2-actuation { background: #7aa6ff; }
+.compressor-actuation { background: #ff9f57; }
+.heater-1 { background: #ff6b68; }
+.heater-2 { background: #f0c15b; }
+.heater-3 { background: #61d394; }
+.heater-4 { background: #73fff6; }
+.heater-5 { background: #7aa6ff; }
+.heater-6 { background: #b589ff; }
+.heater-7 { background: #ff9f57; }
+.heater-8 { background: #e8eef2; }
 .pump1-temp { background: #642928; }
 .pump2-temp { background: #ba4e4c; }
 .pump3-temp { background: #ff6b68; }
@@ -610,6 +621,7 @@ canvas {
 
 .command-grid button,
 .toggle-command {
+  position: relative;
   min-height: 44px;
   border: 1px solid #4c5549;
   border-radius: 6px;
@@ -621,6 +633,32 @@ canvas {
   font-weight: 750;
   line-height: 1.15;
   text-align: left;
+}
+
+.command-grid button.task-active {
+  overflow: hidden;
+  border-color: rgba(97, 211, 148, 0.9);
+  color: #dff9ea;
+  background: #1c3026;
+  box-shadow: inset 0 0 0 1px rgba(97, 211, 148, 0.2);
+}
+
+.command-grid button.task-active::after {
+  position: absolute;
+  right: auto;
+  bottom: 0;
+  left: 0;
+  width: 38%;
+  height: 3px;
+  background: var(--ok);
+  box-shadow: 0 0 8px rgba(97, 211, 148, 0.85);
+  content: "";
+  animation: task-progress 1.15s linear infinite;
+}
+
+@keyframes task-progress {
+  from { transform: translateX(-110%); }
+  to { transform: translateX(290%); }
 }
 
 .command-grid button:hover,

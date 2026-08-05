@@ -36,11 +36,11 @@
           </div>
           <div>
             <span>Onboard log</span>
-            <strong id="storageState">SD logging</strong>
+            <strong id="storageState">SD unavailable</strong>
           </div>
           <div>
             <span>Controller</span>
-            <strong id="controllerState">Main MCU ready</strong>
+            <strong id="controllerState">No telemetry</strong>
           </div>
         </div>
 
@@ -64,19 +64,17 @@
               <button type="button" data-command="startExperiment">Start experiment</button>
               <button type="button" data-command="enterStandby">Enter standby</button>
               <button type="button" data-command="resetModeOverride">Reset mode override</button>
-              <button type="button" data-command="requestStatus" style="display: none;">Request status update</button>
-              <button type="button" data-command="pingExperiment" style="display: none;">Ping experiment</button>
             </div>
           </section>
 
           <section class="command-group" aria-labelledby="pressure-commands">
             <h3 id="pressure-commands">Pressure / Flow</h3>
             <div class="command-grid">
-              <button type="button" data-command="startPressurisation">Start pressurisation</button>
+              <button type="button" data-command="startPressurisation" data-task="PRESSURISATION">Start pressurisation</button>
               <button type="button" data-command="stopPressurisation">Stop pressurisation</button>
               <button type="button" data-command="openOutletValve">Open outlet valve</button>
               <button type="button" data-command="closeOutletValve">Close outlet valve</button>
-              <button type="button" data-command="flushChamber" data-confirm="Flush the measurement chamber now?">Flush chamber</button>
+              <button type="button" data-command="flushChamber" data-task="FLUSH_CHAMBER" data-confirm="Flush the measurement chamber now?">Flush chamber</button>
             </div>
           </section>
 
@@ -147,7 +145,7 @@
             <article class="metric" id="metricMethane">
               <span>CH4</span>
               <strong id="methaneValue">--</strong>
-              <small>ppm</small>
+              <small>raw counts</small>
             </article>
             <article class="metric" id="metricPressure">
               <span>Chamber pressure</span>
@@ -174,10 +172,10 @@
           <div class="chart-grid">
             <article class="chart-card">
               <div class="chart-head">
-                <h3>Gas Sensor</h3>
+                <h3>Raw Light Detector Output</h3>
                 <span><i class="legend-dot methane"></i>CH4 <i class="legend-dot co2"></i>CO2 <i class="legend-dot water"></i>H2O</span>
               </div>
-              <canvas id="gasChart" aria-label="Gas concentration trend"></canvas>
+              <canvas id="gasChart" aria-label="Raw gas light detector output trend"></canvas>
             </article>
             <article class="chart-card">
               <div class="chart-head">
@@ -235,9 +233,25 @@
             <article class="chart-card">
               <div class="chart-head">
                 <h3>Link / Actuation</h3>
-                <span><i class="legend-dot link"></i>E-Link <i class="legend-dot pump"></i>Pumps <i class="legend-dot thermal"></i>Thermal</span>
+                <span><i class="legend-dot link"></i>E-Link <i class="legend-dot pump1-actuation"></i>VP1 <i class="legend-dot pump2-actuation"></i>VP2 <i class="legend-dot compressor-actuation"></i>PP</span>
               </div>
               <canvas id="linkChart" aria-label="Link and actuator trend"></canvas>
+            </article>
+            <article class="chart-card">
+              <div class="chart-head">
+                <h3>Heater Actuation</h3>
+                <div class="chart-legend heater-legend">
+                  <span><i class="legend-dot heater-1"></i>H1</span>
+                  <span><i class="legend-dot heater-2"></i>H2</span>
+                  <span><i class="legend-dot heater-3"></i>H3</span>
+                  <span><i class="legend-dot heater-4"></i>H4</span>
+                  <span><i class="legend-dot heater-5"></i>H5</span>
+                  <span><i class="legend-dot heater-6"></i>H6</span>
+                  <span><i class="legend-dot heater-7"></i>H7</span>
+                  <span><i class="legend-dot heater-8"></i>H8</span>
+                </div>
+              </div>
+              <canvas id="heaterActuationChart" aria-label="Individual heater actuation trend"></canvas>
             </article>
           </div>
         </div>
@@ -395,7 +409,7 @@
         <div id="terminalOutput" class="terminal-output" role="log" aria-live="polite"></div>
         <form id="terminalForm" class="terminal-form" autocomplete="off">
           <label for="terminalInput">manual command</label>
-          <input id="terminalInput" type="text" spellcheck="false" placeholder="type status, help, or ping experiment">
+          <input id="terminalInput" type="text" spellcheck="false" placeholder="type status, help, or a command">
           <button type="submit">Send</button>
         </form>
       </section>

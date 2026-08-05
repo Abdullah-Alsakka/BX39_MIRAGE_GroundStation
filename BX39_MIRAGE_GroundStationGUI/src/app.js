@@ -3,6 +3,7 @@
 
   const MAX_SAMPLES = 120;
   const TELEMETRY_PERIOD_MS = 1000;
+  const EXPECTED_PACKET_SIZE = 216;
 
   const RELAY_LINES = [
     { id: "relay1", label: "PDB relay 1", pin: "GPIO48 / PDB pin 1" },
@@ -163,15 +164,6 @@
         return "flush sequence started with fresh ambient-air exchange";
       }
     },
-    requestStatus: {
-      label: "request status update",
-      wireCommand: "STATUS",
-      aliases: ["request status update", "status update", "status"],
-      effect: function (sim) {
-        sim.forceStatusEvent = true;
-        return "status snapshot requested from main MCU";
-      }
-    },
     restartController: {
       label: "restart main controller",
       wireCommand: "REBOOT",
@@ -202,14 +194,6 @@
         sim.setPeripheral("outletValve", true);
         sim.forcedFaultTicks = 14;
         return "safe shutdown latched; loads disabled and outlet opened";
-      }
-    },
-    pingExperiment: {
-      label: "ping experiment",
-      wireCommand: "PING",
-      aliases: ["ping experiment", "ping", "heartbeat"],
-      effect: function () {
-        return "experiment heartbeat returned";
       }
     },
     relay1On: {
@@ -411,6 +395,7 @@
     thermalChart: document.getElementById("thermalChart"),
     ambientChart: document.getElementById("ambientChart"),
     linkChart: document.getElementById("linkChart"),
+    heaterActuationChart: document.getElementById("heaterActuationChart"),
     diagramAmbientValue: document.getElementById("diagramAmbientValue"),
     diagramPreheaterValue: document.getElementById("diagramPreheaterValue"),
     diagramPump1Value: document.getElementById("diagramPump1Value"),
@@ -439,6 +424,7 @@
   let previousHealth = "unknown";
   let previousLinkStatus = "unknown";
   let usingGateway = false;
+  let legacyProtocol = false;
   const commandedState = {
     relays: {
       relay1: false,
@@ -562,13 +548,12 @@
       this.controllerRebootTicks = 0;
       this.flushTicks = 0;
       this.forcedFaultTicks = 0;
-      this.forceStatusEvent = false;
       this.scenario = { name: "healthy", remaining: 18 };
 
       this.values = {
-        methanePpm: 1.86,
-        co2Ppm: 416,
-        waterPpm: 3100,
+        methaneRaw: 28400,
+        co2Raw: 32700,
+        waterRaw: 21200,
         chamberPressureBar: 2.82,
         chamberTempC: 21.5,
         electronicsTempC: 26.0,
@@ -637,20 +622,27 @@
         linkStatus: this.linkStatus,
         linkQuality: this.values.linkQuality,
         latencyMs: this.values.latencyMs,
-        methanePpm: this.values.methanePpm,
-        co2Ppm: this.values.co2Ppm,
-        waterPpm: this.values.waterPpm,
+        methaneRaw: this.values.methaneRaw,
+        co2Raw: this.values.co2Raw,
+        waterRaw: this.values.waterRaw,
         chamberPressureBar: this.values.chamberPressureBar,
         chamberTempC: this.values.chamberTempC,
         electronicsTempC: this.values.electronicsTempC,
         humidityRh: this.values.humidityRh,
         ambientPressureBar: this.values.ambientPressureBar,
         ambientTempC: this.values.ambientTempC,
-        pumpDutyPct: this.peripherals.pump1 || this.peripherals.pump2 ? clamp(68 + noise(8), 0, 100) : 0,
         pump1DutyPct: this.peripherals.pump1 ? clamp(68 + noise(8), 0, 100) : 0,
         pump2DutyPct: this.peripherals.pump2 ? clamp(66 + noise(8), 0, 100) : 0,
         compressorDutyPct: this.peripherals.compressor ? clamp(58 + noise(10), 0, 100) : 0,
         heaterDutyPct: this.heatingEnabled ? clamp(36 + (22 - this.values.chamberTempC) * 4 + noise(5), 0, 100) : 0,
+        heater1ActuationPct: this.heaterMask & (1 << 0) ? 100 : 0,
+        heater2ActuationPct: this.heaterMask & (1 << 1) ? 100 : 0,
+        heater3ActuationPct: this.heaterMask & (1 << 2) ? 100 : 0,
+        heater4ActuationPct: this.heaterMask & (1 << 3) ? 100 : 0,
+        heater5ActuationPct: this.heaterMask & (1 << 4) ? 100 : 0,
+        heater6ActuationPct: this.heaterMask & (1 << 5) ? 100 : 0,
+        heater7ActuationPct: this.heaterMask & (1 << 6) ? 100 : 0,
+        heater8ActuationPct: this.heaterMask & (1 << 7) ? 100 : 0,
         coolerDutyPct: this.coolingEnabled ? clamp(26 + (this.values.chamberTempC - 24) * 4 + noise(5), 0, 100) : 0,
         outletValveOpen: this.outletValveOpen,
         pressureSystemOn: this.pressurisationActive,
@@ -660,6 +652,9 @@
         onboardLogging: true,
         storageFreePct: this.values.storageFreePct,
         controller: "MAIN_MCU_READY",
+        controllerReady: true,
+        pressureState: this.flushTicks > 0 ? 4 : this.pressurisationActive ? 1 : 0,
+        activeTask: this.flushTicks > 0 ? "FLUSH_CHAMBER" : this.pressurisationActive ? "PRESSURISATION" : null,
         scenario: this.scenario.name,
         statusText: this.statusText()
       };
@@ -680,7 +675,8 @@
         linkQuality: 0,
         latencyMs: 0,
         dropoutReason: reason,
-        controller: this.controllerRebootTicks > 0 ? "MAIN_MCU_REBOOTING" : "LINK_DROP"
+        controller: this.controllerRebootTicks > 0 ? "MAIN_MCU_RESTARTING" : "LINK_DROP",
+        controllerReady: false
       };
     }
 
@@ -746,7 +742,7 @@
         this.flushTicks -= 1;
         pressureTarget = 2.68 + noise(0.08);
         this.values.humidityRh = approach(this.values.humidityRh, 28, 0.22);
-        this.values.waterPpm = approach(this.values.waterPpm, 1800, 0.25);
+        this.values.waterRaw = approach(this.values.waterRaw, 18800, 0.25);
         if (this.flushTicks === 0) {
           this.outletValveOpen = false;
           this.setPeripheral("outletValve", false);
@@ -790,11 +786,11 @@
       }
 
       this.values.humidityRh = clamp(approach(this.values.humidityRh, humidityTarget, 0.11) + noise(0.8), 12, 94);
-      this.values.waterPpm = clamp(approach(this.values.waterPpm, 780 + this.values.humidityRh * 68 + altitudeFactor * 600, 0.14) + noise(45), 500, 7200);
+      this.values.waterRaw = clamp(approach(this.values.waterRaw, 17800 + this.values.humidityRh * 92 + altitudeFactor * 1100, 0.14) + noise(70), 0, 65535);
 
-      const gasPulse = Math.sin(this.tick / 18) * 0.025;
-      this.values.methanePpm = clamp(1.86 + altitudeFactor * 0.11 + gasPulse + noise(0.015), 1.55, 2.35);
-      this.values.co2Ppm = clamp(416 - altitudeFactor * 12 + Math.sin(this.tick / 22) * 4 + noise(2.2), 370, 450);
+      const gasPulse = Math.sin(this.tick / 18) * 180;
+      this.values.methaneRaw = clamp(28400 + altitudeFactor * 900 + gasPulse + noise(80), 0, 65535);
+      this.values.co2Raw = clamp(32700 - altitudeFactor * 700 + Math.sin(this.tick / 22) * 210 + noise(90), 0, 65535);
 
       let linkTarget = 97;
       if (this.scenario.name === "humidity-warning" || this.scenario.name === "pressure-warning") {
@@ -1045,6 +1041,7 @@
           requestId: requestId,
           commandId: commandId,
           label: definition.label,
+          origin: origin,
           wireCommand: definition.wireCommand
         })
       })
@@ -1150,6 +1147,16 @@
         return;
       }
 
+      const nextLegacyProtocol = Number.isFinite(status.packetSize) && status.packetSize < EXPECTED_PACKET_SIZE;
+      if (nextLegacyProtocol && !legacyProtocol) {
+        this.onLogEvent("warn", "Payload protocol update required", "live gateway still uses the legacy " + status.packetSize + "-byte status packet");
+        terminal.write("payload firmware/gateway update required for SD, controller, raw detector, and task telemetry", "warn");
+      }
+      legacyProtocol = nextLegacyProtocol;
+      if (latestTelemetry) {
+        renderTelemetry(latestTelemetry);
+      }
+
       if (status.payloadConnected) {
         if (activeCommandRouter !== gatewayCommandRouter) {
           activeCommandRouter = gatewayCommandRouter;
@@ -1177,6 +1184,8 @@
       }
       setChip(dom.linkState, "E-Link dropout", "dropout");
       setChip(dom.missionMode, resolveMissionMode(latestTelemetry), "neutral");
+      dom.controllerState.textContent = "No telemetry";
+      renderActiveTask(null);
 
       if (this.connected) {
         this.connected = false;
@@ -1193,6 +1202,8 @@
 
       setChip(dom.linkState, "E-Link dropout", "dropout");
       setChip(dom.missionMode, resolveMissionMode(latestTelemetry), "neutral");
+      dom.controllerState.textContent = "No telemetry";
+      renderActiveTask(null);
     }
 
     logFrame(sample) {
@@ -1341,7 +1352,7 @@
     const normalized = normalizeCommand(raw);
 
     if (normalized === "help") {
-      terminal.write("commands: status, clear, start experiment, enter standby, start/stop pressurisation, open/close outlet valve, pwm1 0-100, pwm2 0-100, pwm3 0-100, relay 1-4 on/off, pump 1/2 on/off, compressor on/off, enable/disable heating, enable/disable cooling, flush chamber, restart main controller, emergency stop, ping experiment");
+      terminal.write("commands: status, clear, start experiment, enter standby, start/stop pressurisation, open/close outlet valve, pwm1 0-100, pwm2 0-100, pwm3 0-100, relay 1-4 on/off, pump 1/2 on/off, compressor on/off, enable/disable heating, enable/disable cooling, flush chamber, restart main controller, emergency stop");
       return;
     }
 
@@ -1371,8 +1382,8 @@
 
     const commandId = commandAliases[normalized];
     if (!commandId) {
-      terminal.write("ERR UNKNOWN_COMMAND; type help for available mock uplink commands", "error");
-      log.add("warn", "Manual command rejected", raw + " is not mapped to a mock uplink command");
+      terminal.write("ERR UNKNOWN_COMMAND; type help for available uplink commands", "error");
+      log.add("warn", "Manual command rejected", raw + " is not mapped to an uplink command");
       return;
     }
 
@@ -1464,14 +1475,19 @@
 
     dom.frameNumber.textContent = display && display.seq ? String(display.seq) : "--";
     dom.latencyValue.textContent = sample.valid ? sample.latencyMs + " ms" : "--";
-    dom.storageState.textContent = display && display.onboardLogging ? "SD " + display.storageFreePct.toFixed(0) + "% free" : "SD logging";
-    dom.controllerState.textContent = sample.controller === "MAIN_MCU_REBOOTING" ? "Main MCU rebooting" : sample.controller === "LINK_DROP" ? "awaiting frame" : "Main MCU ready";
+    dom.storageState.textContent = legacyProtocol
+      ? "Update required"
+      : display && display.onboardLogging && Number.isFinite(display.storageFreePct)
+        ? "SD " + display.storageFreePct.toFixed(0) + "% free"
+        : "SD unavailable";
+    dom.controllerState.textContent = controllerLabel(sample);
     dom.terminalRoute.textContent = activeCommandRouter === gatewayCommandRouter
       ? (linkStatus === "DROPOUT" ? "gateway route degraded" : "payload TCP route")
       : (linkStatus === "DROPOUT" ? "mock route degraded" : "local mock route");
 
     if (display) {
-      dom.methaneValue.textContent = display.methanePpm.toFixed(2);
+      const methaneRaw = Number.isFinite(display.methaneRaw) ? display.methaneRaw : null;
+      dom.methaneValue.textContent = methaneRaw === null ? "--" : methaneRaw.toFixed(0);
       dom.chamberPressureValue.textContent = display.chamberPressureBar.toFixed(2);
       const chamberTemp = display?.chamberTempC_K96 ?? display?.chamberTempC ?? 0;
       dom.chamberTempValue.textContent = chamberTemp.toFixed(1);
@@ -1479,14 +1495,15 @@
       dom.humidityValue.textContent = humidityRH.toFixed(0);
       dom.linkQualityValue.textContent = String(Math.round(linkQuality));
 
-      setMetricState(dom.metricMethane, display.methanePpm < 1.65 || display.methanePpm > 2.25 ? "warning" : "healthy");
+      setMetricState(dom.metricMethane, methaneRaw === null ? "dropout" : display.k96Error ? "warning" : "healthy");
       setMetricState(dom.metricPressure, pressureState(display.chamberPressureBar));
       setMetricState(dom.metricTemperature, temperatureState(display.chamberTempC_K96));
-      setMetricState(dom.metricHumidity, humidityState(display.humidityRh));
+      setMetricState(dom.metricHumidity, humidityState(display.humidityRh_ambient));
       setMetricState(dom.metricLink, linkStatus === "DROPOUT" ? "dropout" : linkQuality < 75 ? "warning" : "healthy");
     }
 
     renderActuatorState(display);
+    renderActiveTask(sample.valid ? sample : null);
     renderSystemOverview(display, health, linkStatus);
     updateFrameAge();
   }
@@ -1554,6 +1571,8 @@
 
     setChip(dom.linkState, "E-Link dropout", "dropout");
     setChip(dom.missionMode, resolveMissionMode(latestTelemetry), "neutral");
+    dom.controllerState.textContent = "No telemetry";
+    renderActiveTask(null);
   }
 
   function applyCommandedState(commandId) {
@@ -1567,8 +1586,14 @@
       return;
     }
 
-    if (commandId === "startExperiment" || commandId === "startPressurisation" || commandId === "flushChamber") {
+    if (commandId === "startExperiment" || commandId === "startPressurisation") {
       setCommandedPressureTrain(true);
+    }
+
+    if (commandId === "flushChamber") {
+      commandedState.peripherals.pump1 = true;
+      commandedState.peripherals.pump2 = true;
+      commandedState.peripherals.compressor = false;
     }
 
     if (commandId === "enterStandby" || commandId === "stopPressurisation" || commandId === "restartController") {
@@ -1631,6 +1656,15 @@
     });
   }
 
+  function renderActiveTask(sample) {
+    const activeTask = sample && sample.activeTask ? sample.activeTask : null;
+    document.querySelectorAll("[data-task]").forEach(function (button) {
+      const active = button.dataset.task === activeTask;
+      button.classList.toggle("task-active", active);
+      button.setAttribute("aria-busy", String(active));
+    });
+  }
+
   function renderSystemOverview(sample, healthOverride, linkOverride) {
     const state = extractSystemState(sample);
     const linkStatus = linkOverride || (sample ? sample.linkStatus : previousLinkStatus);
@@ -1640,11 +1674,11 @@
     const coolerActive = (state.heaterMask & DEFAULT_COOLER_MASK) !== 0 || state.coolerMask !== 0 || Boolean(sample && sample.coolingEnabled);
     const chamberState = sample ? worstState([
       pressureState(sample.chamberPressureBar),
-      temperatureState(sample.chamberTempC),
-      humidityState(sample.humidityRh)
+      temperatureState(sample.chamberTempC_K96 ?? sample.chamberTempC_MS ?? sample.chamberTempC),
+      humidityState(sample.humidityRh_ambient)
     ]) : "neutral";
     const linkState = linkStatus === "DROPOUT" ? "dropout" : linkStatus === "DEGRADED" ? "warn" : "on";
-    const mainState = linkStatus === "DROPOUT" ? "dropout" : health === "fault" ? "fault" : health === "warning" ? "warn" : "on";
+    const mainState = linkStatus === "DROPOUT" ? "dropout" : sample && sample.controllerReady === false ? "warn" : health === "fault" ? "fault" : health === "warning" ? "warn" : "on";
     const thermalState = sample && sample.thermalOnline === false ? "fault" : sample && sample.thermalError ? "warn" : "on";
 
     setDiagramNodeState("diagramElLink", linkState);
@@ -1657,7 +1691,7 @@
     setDiagramNodeState("diagramCompressor", state.peripherals.compressor ? "on" : "off");
     setDiagramNodeState("diagramChamber", chamberState === "healthy" ? "on" : chamberState);
     setDiagramNodeState("diagramOutletValve", state.peripherals.outletValve ? "on" : "off");
-    setDiagramNodeState("diagramStorage", sample && sample.storageFreePct < 20 ? "warn" : "on");
+    setDiagramNodeState("diagramStorage", legacyProtocol || !sample || !sample.onboardLogging ? "fault" : sample.storageFreePct < 20 ? "warn" : "on");
     setDiagramNodeState("diagramHeaters", heaterActive ? "on" : "off");
     setDiagramNodeState("diagramCooler", coolerActive ? "on" : "off");
 
@@ -1691,10 +1725,10 @@
     setText(dom.diagramChamberValue, sample ? sample.chamberPressureBar.toFixed(2) + " bar / " + chamberTemp.toFixed(1) + " C" : "-- bar / -- C");
     setText(dom.diagramValveValue, state.peripherals.outletValve ? "OPEN" : "CLOSED");
     setText(dom.diagramLinkValue, linkLabel(linkStatus).replace("E-Link ", "").toUpperCase());
-    setText(dom.diagramMainValue, health === "unknown" ? "READY" : health.toUpperCase());
-    setText(dom.diagramPressureMcuValue, pressureActive ? "ACTIVE" : "STANDBY");
+    setText(dom.diagramMainValue, controllerDiagramLabel(sample));
+    setText(dom.diagramPressureMcuValue, sample && sample.activeTask ? sample.activeTask.replace("_", " ") : pressureActive ? "ACTIVE" : "STANDBY");
     setText(dom.diagramThermalMcuValue, sample && sample.thermalOnline === false ? "OFFLINE" : sample && sample.thermalError ? "WARN" : "ONLINE");
-    setText(dom.diagramStorageValue, sample ? sample.storageFreePct.toFixed(0) + "% FREE" : "--");
+    setText(dom.diagramStorageValue, legacyProtocol ? "UPDATE" : sample && sample.onboardLogging && Number.isFinite(sample.storageFreePct) ? sample.storageFreePct.toFixed(0) + "% FREE" : "UNAVAILABLE");
     setText(dom.diagramHeaterValue, heaterActive ? describeMask(state.heaterMask & DEFAULT_HEATER_MASK) : "OFF");
     setText(dom.diagramCoolerValue, coolerActive ? "ACTIVE" : "OFF");
   }
@@ -1806,11 +1840,11 @@
   
   function drawAllCharts() {
     drawChart(dom.gasChart, history, {
-      yLabel: "ppm",
+      yLabel: "raw",
       series: [
-        { key: "methanePpm", color: "#61d394", min: 1.5, max: 2.4 },
-        { key: "co2Ppm", color: "#7aa6ff", min: 360, max: 460 },
-        { key: "waterPpm", color: "#f0c15b", min: 500, max: 7200 }
+        { key: "methaneRaw", color: "#61d394", min: 0, max: 65535 },
+        { key: "co2Raw", color: "#7aa6ff", min: 0, max: 65535 },
+        { key: "waterRaw", color: "#f0c15b", min: 0, max: 65535 }
       ]
     });
 
@@ -1855,8 +1889,23 @@
       yLabel: "%",
       series: [
         { key: "linkQuality", color: "#61d394", min: 0, max: 100 },
-        { key: "pumpDutyPct", color: "#f0c15b", min: 0, max: 100 },
-        { key: "heaterDutyPct", color: "#ff9f57", min: 0, max: 100 }
+        { key: "pump1DutyPct", color: "#f0c15b", min: 0, max: 100 },
+        { key: "pump2DutyPct", color: "#7aa6ff", min: 0, max: 100 },
+        { key: "compressorDutyPct", color: "#ff9f57", min: 0, max: 100 }
+      ]
+    });
+
+    drawChart(dom.heaterActuationChart, history, {
+      yLabel: "%",
+      series: [
+        { key: "heater1ActuationPct", color: "#ff6b68", min: 0, max: 100 },
+        { key: "heater2ActuationPct", color: "#f0c15b", min: 0, max: 100 },
+        { key: "heater3ActuationPct", color: "#61d394", min: 0, max: 100 },
+        { key: "heater4ActuationPct", color: "#73fff6", min: 0, max: 100 },
+        { key: "heater5ActuationPct", color: "#7aa6ff", min: 0, max: 100 },
+        { key: "heater6ActuationPct", color: "#b589ff", min: 0, max: 100 },
+        { key: "heater7ActuationPct", color: "#ff9f57", min: 0, max: 100 },
+        { key: "heater8ActuationPct", color: "#e8eef2", min: 0, max: 100 }
       ]
     });
 
@@ -2389,6 +2438,39 @@ function drawTooltip(ctx, hoverPos, samples, pad, plotW, plotH, config, yRange, 
     return "E-Link dropout";
   }
 
+  function controllerLabel(sample) {
+    if (!sample || !sample.valid || sample.controller === "LINK_DROP") {
+      return "No telemetry";
+    }
+    if (legacyProtocol) {
+      return "Update required";
+    }
+    const labels = {
+      MAIN_MCU_BOOTING: "Main MCU booting",
+      MAIN_MCU_READY: "Main MCU ready",
+      MAIN_MCU_SAFE_SHUTDOWN: "Main MCU safe",
+      MAIN_MCU_RESTARTING: "Main MCU restarting"
+    };
+    return labels[sample.controller] || "Main MCU state unknown";
+  }
+
+  function controllerDiagramLabel(sample) {
+    if (!sample) {
+      return "NO DATA";
+    }
+    if (legacyProtocol) {
+      return "UPDATE";
+    }
+    const labels = {
+      MAIN_MCU_BOOTING: "BOOTING",
+      MAIN_MCU_READY: "READY",
+      MAIN_MCU_SAFE_SHUTDOWN: "SAFE",
+      MAIN_MCU_RESTARTING: "RESTARTING",
+      LINK_DROP: "NO LINK"
+    };
+    return labels[sample.controller] || "UNKNOWN";
+  }
+
   function resolveMissionMode(sample) {
     if (sample) {
       if (typeof sample.missionMode === "string" && sample.missionMode) {
@@ -2412,15 +2494,18 @@ function drawTooltip(ctx, hoverPos, samples, pad, plotW, plotH, config, yRange, 
       return "NO_VALID_TELEMETRY";
     }
 
+    const rawValue = function (value) {
+      return Number.isFinite(value) ? value.toFixed(0) : "unavailable";
+    };
     return [
       "MODE=" + sample.mode,
       "HEALTH=" + sample.health.toUpperCase(),
-      "CH4=" + sample.methanePpm.toFixed(2) + "ppm",
-      "CO2=" + sample.co2Ppm.toFixed(0) + "ppm",
-      "H2O=" + sample.waterPpm.toFixed(0) + "ppm",
+      "CH4_RAW=" + rawValue(sample.methaneRaw),
+      "CO2_RAW=" + rawValue(sample.co2Raw),
+      "H2O_RAW=" + rawValue(sample.waterRaw),
       "P_CHAMBER=" + sample.chamberPressureBar.toFixed(2) + "bar",
-      "T_CHAMBER=" + sample.chamberTempC.toFixed(1) + "C",
-      "RH=" + sample.humidityRh.toFixed(0) + "%",
+      "T_CHAMBER=" + (sample.chamberTempC_K96 ?? sample.chamberTempC ?? 0).toFixed(1) + "C",
+      "RH=" + (sample.humidityRh_ambient ?? 0).toFixed(0) + "%",
       "LINK=" + sample.linkStatus
     ].join(" ");
   }
